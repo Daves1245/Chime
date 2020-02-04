@@ -1,0 +1,3 @@
+#!/bin/bash
+
+gcc display.c -o display -Wall -lncurses
