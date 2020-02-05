@@ -19,11 +19,9 @@
 #define BACKLOG 10
 
 void sigchld_handler(int);                      /* Error handling */
-void broadcastmsg(struct msg *m);               /* Broadcast msg to all users */
+void broadcastmsg(struct message *m);               /* Broadcast msg to all users */
 void broadcast(const char *msg, size_t msglen); /* To be deprecated */
 void *manager(void *arg);                       /* Manager thread for connections */
-int msgrecv(struct msg *m, int sfd);            /* Send a message through sfd */
-int msgsend(struct msg *m, int sfd);            /* Receive a message from sfd */
 
 struct pollfd listener[BACKLOG]; // connections 
 int numconns;
@@ -53,22 +51,22 @@ void broadcast(const char *msg, size_t msglen) {
   } // end of loop
 }
 
-void broadcastmsg(struct msg *m) {
+void broadcastmsg(struct message *m) {
   for (int i = 0; i < numconns; i++) {
     if (listener[i].fd > 0) {
-      msgsend(m, listener[i].fd);
+      sendmessage(listener[i].fd, m);
     }
   } 
 }
 
 void *manager(void *arg) {
   char buff[MAX_RECV_LEN];
-  struct msg m;
+  struct message m;
   while (1) {
     poll(listener, numconns, 0);
     for (int i = 0; i < numconns; i++) {
       if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
-        msgrecv(&m, listener[i].fd);
+        recvmessage(listener[i].fd, &m);
         broadcastmsg(&m);
         /*size_t numbytes;
           if ((numbytes = recv(listener[i].fd, buff, MAX_RECV_LEN, 0)) == -1) {

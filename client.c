@@ -17,6 +17,11 @@
 #define MAXDATASIZE 100
 
 int main(int argc, char **argv) {
+
+  char handle[MAX_NAME_LEN + 1];
+  printf("handle:");
+  scanf("%s", handle);
+
   int sockfd;
   struct addrinfo hints, *servinfo, *p;
   int rv;
@@ -61,6 +66,8 @@ int main(int argc, char **argv) {
   pthread_t handler;
   struct handlerinfo info;
   info.sfd = sockfd;
+  info.handle = handle;
+
   if (pthread_create(&handler, NULL, connection_handler, &info)) {
     fprintf(stderr, "Could not create handler for connection\n");
     perror("perror_create");

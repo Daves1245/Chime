@@ -1,3 +1,5 @@
+#include <inttypes.h>
+
 // Arbitrary
 #define MAX_RECV_LEN 100
 #define MAX_SEND_LEN 100
@@ -10,96 +12,140 @@
 
 #define HASH_LEN 256 // length of hash
 
-#define UNIT64_BASE10_LEN 21 // XXX rename this atrocity
-#define UINT32_BASE10_Len 12 // XXX number of base10 digits needed to store all values of 32 bit integer
+#define UINT64_BASE10_LEN 21 // XXX rename this atrocity
+#define UINT32_BASE10_LEN 12 // XXX number of base10 digits needed to store all values of 32 bit integer
 
 struct handlerinfo {
   int sfd;
-};
-
-struct packet {
-  unsigned short id;
-  unsigned char numpacks;
-  unsigned char index;
-  unsigned char flags;
-  char text[MAX_PACKET_PAYLOAD_SIZE]; // 1500 ethernet limit 
+  char *handle;
 };
 
 struct message {
   uint64_t id;
-  char from[NAME_LEN];
-  char text[MAX_TEXT_LEN];
+  char from[MAX_NAME_LEN + 1];
+  char text[MAX_TEXT_LEN + 1];
   uint32_t flags;
 };
-
-struct msg_hash {
-  uint64_t id; 
-  char hash[HASH_LEN];
-}
 
 void endconnection(int fd);                         /* Terminate the connection */
 void getinput(char *dest, size_t *res, size_t len); /* store '\n'-terminated line at most len into dest and modify *res accordingly */
 void *thread_recv(void *);                          /* Message receiving thread */
 void *thread_send(void *);                          /* Message sending thread */
 void *connection_handler(void *);                   /* Connection handling thread */
-int recvpacket(struct packet *m, int sfd);          /* Send a message through sfd */
-int sendpacket(struct packet *m, int sfd);          /* Receive a message from sfd */
+void hashmsg(struct message *msg, char *res);       /* Hash a message and store it in res */
+int sendmessage(int sfd, struct message *msg);      /* Send a message to sfd */
+int recvmessage(int sfd, struct message *msg);      /* Get a message from sfd */
+// XXX - implement time stamping feature
+void timestamp(struct message *m);                  /* Timestamp a message */
 
 /* Wrapper for send function; XXX - add failsafes */
 int trysend(int fd, void *buff, size_t bufflen) {
-  size_t send;
+  size_t sent;
   if ((sent = send(fd, buff, bufflen, 0)) != bufflen) {
     if (sent < 0) {
       perror("send");
+      return errno;
     } else {
       perror("incomplete send");
+      return errno;
     }
   }
+  return 0;
 }
 
-void timestamp(struct message *m); // XXX - implement time stamping feature
+/* Wrapper for recv function; XXX - add failsafes */
+int tryrecv(int fd, void *buff, size_t bufflen) {
+  size_t recvd;
+  if ((recvd = recv(fd, buff, bufflen, 0)) != bufflen) {
+    if (recvd < 0) {
+      perror("recv");
+      return errno;
+    } else {
+      printf("recvd != bufflen, inside tryrecv function\n");
+      return errno;
+    }
+  }
+  return 0;
+}
+
+// XXX
+void hashmsg(struct message *msg, char *res) {
+  res = '\0';
+  return;
+}
+
+/*
+ * purpose: send type of data being sent first
+ * "MSG", "REQ", "ACK", "STP", etc.
+ * for message, request, ack, stamp, respectively.
+ * make this for each message-encapsulating type
+ */
+void initsendmsg(int sfd) {
+  trysend(sfd, "MSG:", sizeof "MSG:");
+}
 
 /* Unpack struct, send each field as char stream */
 int sendmessage(int sfd, struct message *msg) {
+  // initsendmsg(sfd);
+
   char hash[HASH_LEN];
+  char id[UINT64_BASE10_LEN + 1]; // +1 for ':' delimiter
+  char flags[UINT32_BASE10_LEN + 1];
+
   hashmsg(msg, hash);
 
-  char *tmp = "MSG:";
-  trysend(sfd, tmp, sizeof tmp);
-  char num[UINT64_BASE10_LEN + 1]; // +1 for ':' delimiter
-  sprintf(num, "%012ld", msg->id);
-  num[UINT64_BASE10_LEN] = ':';
-  trysend(sfd, num, sizeof num);
-  trysend(sfd, msg->from, sizeof(msg->from));
-  trysend(sfd, msg->text, sizeof(msg->text));
-  char flags[UINT32_BASE10_LEN + 1];
-  sprintf(flags, "%012ld", msg->flags);
+  sprintf(id, "%012" PRIu64, msg->id);
+  sprintf(flags, "%012" PRIu32, msg->flags);
+
+  id[UINT64_BASE10_LEN] = ':';
   flags[UINT32_BASE10_LEN] = ':';
+
+#ifdef DEBUG
+  printf("[DEBUG]: id `%s`\n", id);
+  printf("[DEBUG]: flags `%s`\n", flags);
+  printf("[DEBUG]: from `%s`\n", msg->from);
+  printf("[DEBUG]: text `%s`\n", msg->text);
+#endif
+
+  trysend(sfd, id, sizeof id);
+  trysend(sfd, msg->from, MAX_NAME_LEN + 1);
+  trysend(sfd, msg->text, MAX_TEXT_LEN + 1);
   trysend(sfd, flags, sizeof flags);
+  return 0; // XXX not finished
 }
 
-// XXX rename
-int recvpacket(struct msg *m, int sfd) {
-  size_t received;
-  if ((received = recv(sfd, m, sizeof m, 0)) != sizeof m) {
-    perror("recv");
-    return -1;
-  }
-  return 0;
-}
+/*
+ * we have just received "MSG:"
+ * over the wire. Now, we put the incoming message
+ * into the msg pointer
+ * "
+ */
+int recvmessage(int sfd, struct message *msg) {
+  char id[UINT64_BASE10_LEN + 1]; // +1 for ':' delimiter
+  char from[MAX_NAME_LEN + 1]; // +1 for ':' delimiter
+  char text[MAX_TEXT_LEN + 1]; // +1 for ':' delimiter
+  char flags[UINT32_BASE10_LEN + 1]; // +1 for ':' delimiter
 
-// XXX rename to avoid confusion with sendmsg
-int sendpacket(struct msg *m, int sfd) {
-  size_t sent;
-  if ((sent = send(sfd, m, sizeof m, 0)) != sizeof m) {
-    if (sent < 0) {
-      perror("send");
-      return -1;
-    }
-    perror("incomplete send");
-    return -1;
-  }
-  return 0;
+  tryrecv(sfd, id, sizeof id);
+  tryrecv(sfd, from, sizeof from);
+  tryrecv(sfd, text, sizeof text);
+  tryrecv(sfd, flags, sizeof flags);
+
+  msg->id = atoll(id);
+  memcpy(msg->from, from, MAX_NAME_LEN);
+  msg->from[MAX_NAME_LEN] = '\0';
+  memcpy(msg->text, text, MAX_TEXT_LEN);
+  msg->text[MAX_TEXT_LEN] = '\0';
+  msg->flags = atoll(flags);
+
+#ifdef DEBUG
+  printf("[RECEIVED] id %" PRIu64 "\n", msg->id);
+  printf("[RECEIVED] from %s\n", msg->from);
+  printf("[RECEIVED] text %s\n", msg->text);
+  printf("[RECEIVED] flags %" PRIu32 "\n", msg->flags);
+#endif
+
+  return 0; // XXX not finished
 }
 
 /*
@@ -107,8 +153,8 @@ int sendpacket(struct msg *m, int sfd) {
  * - check for recognition of logging off
  */
 void endconnection(int fd) {
-  char buff[5] = "exit";
-  send(fd, buff, 5, 0);
+  char buff[] = "END";
+  send(fd, buff, sizeof buff, 0);
   close(fd);
 }
 
@@ -119,36 +165,6 @@ void *get_in_addr(struct sockaddr *sa) {
   }
 
   return &(((struct sockaddr_in6 *)sa)->sin6_addr);
-}
-
-/*
- * Return array of packets
- * representing a message.
- * Message is determined by '\n'-terminated input
- * from user
- * XXX - fill up stack variable first, then iff max payload is reached,
- * then allocate on heap and return a pointer to array of packets representing
- * msg. i.e. reduce memory allocation footprint.
- */
-struct packet *makemsg(size_t *numpackets) {
-  struct packet *ret = malloc(sizeof(*ret));
-  int c, i, j;
-  size_t size;
-  for (i = 0; i < MAX_PACKETS_PER_MSG; i++) {
-    for (j = 0; j < MAX_PACKET_PAYLOAD_SIZE; j++) {
-      c = getchar(); 
-      if (c == '\n') {
-        *num
-        goto end;
-      }
-      ret[i]->text[j] = c;
-    }
-  }
-  fprintf(stderr, "Cannot store input into message\n");
-  free(ret);
-  return NULL;
-end:
-   
 }
 
 void getinput(char *dest, size_t *res, size_t len) {
@@ -164,7 +180,7 @@ void getinput(char *dest, size_t *res, size_t len) {
   dest[*res - 1] = '\0';
 }
 
-void *thread_recv(void *sfdp) {
+void *thread_recv_old(void *sfdp) {
   int sfd = *((int *)sfdp);
   char buff[MAX_RECV_LEN];
   while (1) {
@@ -182,7 +198,41 @@ void *thread_recv(void *sfdp) {
   return NULL; // XXX pthread_exit(retvalue);
 }
 
+void *thread_recv(void *sfdp) {
+  int sfd = *((int *)sfdp);
+  struct message msg;
+  while (1) {
+    recvmessage(sfd, &msg);
+    printf("[%s]: %s\n", msg.from, msg.text);
+  }
+}
+
 void *thread_send(void *sfdp) {
+  struct handlerinfo *info = sfdp;
+  struct message msg;
+  size_t msgtextlen;
+
+  memset(&msg, 0, sizeof msg);
+  memcpy(msg.from, "HELLO\0", 6);
+  strcpy(msg.from, info->handle);
+
+  struct pollfd listener;
+  listener.fd = 0; // poll for stdin
+  listener.events = POLLIN; // wait till we have input
+
+  while (1) {
+    /* Prompt and wait for input */
+    printf(":");
+    poll(&listener, 1, -1); // block until we can read
+    if (listener.revents == POLLIN) {
+      /* XXX Grab input, check for exit */
+      getinput(msg.text, &msgtextlen, MAX_TEXT_LEN);
+      msg.id++;
+      sendmessage(info->sfd, &msg);
+    }
+  }
+}
+void *thread_send_old(void *sfdp) {
   int sfd = *((int *)sfdp);
   char buff[MAX_SEND_LEN];
   size_t msglen;
@@ -201,7 +251,7 @@ void *thread_send(void *sfdp) {
       getinput(buff, &msglen, MAX_SEND_LEN);
       if (strcmp(buff, "exit") == 0) {
         printf("exiting.\n");
-        // XXX endconnection();
+        endconnection(sfd);
         break;
       }
 
@@ -221,15 +271,14 @@ void *thread_send(void *sfdp) {
 }
 
 void *connection_handler(void *arg) {
-  struct handlerinfo *info = arg;
   pthread_t sender, receiver;
 
-  if (pthread_create(&sender, NULL, thread_send, &info->sfd)) {
+  if (pthread_create(&sender, NULL, thread_send, arg)) {
     fprintf(stderr, "Could not create message sending thread\n");
     perror("pthread_create");
     return NULL; // XXX pthread_exit(retvalue)
   }
-  if (pthread_create(&receiver, NULL, thread_recv, &info->sfd)) {
+  if (pthread_create(&receiver, NULL, thread_recv, arg)) {
     fprintf(stderr, "Could not create message receiving thread\n");
     perror("pthread_create");
     // XXX kill sender thread 
