@@ -26,6 +26,14 @@ void *manager(void *arg);                       /* Manager thread for connection
 struct pollfd listener[BACKLOG]; // connections 
 int numconns;
 
+void logs(const char *str) {
+  time_t rtime;
+  struct tm *now;
+  time(&rtime);
+  now = localtime(&rtime);
+  printf(CYAN "[%d:%d]: " ANSI_RESET "%s\n", now->tm_hour, now->tm_min, str);
+}
+
 void sigchld_handler(int s) {
   // waitpid() might overwrite errno, so we save and restore it
   int saved_errno = errno;
@@ -56,7 +64,7 @@ void broadcastmsg(struct message *m) {
     if (listener[i].fd > 0) {
       sendmessage(listener[i].fd, m);
     }
-  } 
+  }
 }
 
 void *manager(void *arg) {
@@ -65,16 +73,34 @@ void *manager(void *arg) {
   while (1) {
     poll(listener, numconns, 0);
     for (int i = 0; i < numconns; i++) {
+      char logbuff[100 + MAX_TEXT_LEN]; // XXX make logs var args. tmp hack fix
       if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
         recvmessage(listener[i].fd, &m);
+
+        if (strcmp(m.text, "/exit") == 0) {
+          sprintf(logbuff, "Disconnecting client on socket fd: %d", listener[i].fd); // XXX var args logs
+          close(listener[i].fd);
+          listener[i].fd *= -1; // remove from poll() query 
+          logs(logbuff);
+          sprintf(logbuff, "user %s disconnected", m.from);
+          logs(logbuff);
+
+          m.flags = FDISCONNECT;
+        }
+
+        sprintf(logbuff, YELLOW "received msg from %s", m.from);
+        logs(logbuff);
+
         broadcastmsg(&m);
+        sprintf(logbuff, BLUE "BROADCAST: " ANSI_RESET "%s", m.text);
+        logs(logbuff);
+
         /*size_t numbytes;
           if ((numbytes = recv(listener[i].fd, buff, MAX_RECV_LEN, 0)) == -1) {
           perror("recv");
           break;
           }*/
         //broadcast(buff, numbytes);
-        printf("[BROADCAST]:%s\n", m.text);
         memset(buff, '\0', MAX_RECV_LEN);
       }
     } // end msg searching loop 
@@ -149,7 +175,9 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  printf("server: waiting for connections...\n");
+  // puts(GREEN "Manager thread created" ANSI_RESET);
+  logs(GREEN "Manager thread created" ANSI_RESET);
+  logs("Waiting for connections...\n");
   while (1) { // main accept() loop
     sin_size = sizeof their_addr;
     new_fd = accept(sockfd, (struct sockaddr *) &their_addr, &sin_size);
@@ -160,7 +188,10 @@ int main(int argc, char **argv) {
     }
 
     inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *) &their_addr), s, sizeof s);
-    printf("Connection from %s\n", s);
+    // XXX add var args to logs 
+    char buff[100]; // arbitrary tmp hack fix 
+    sprintf(buff, GREEN "Connection from %s", s);
+    logs(buff);
 
     listener[numconns].fd = new_fd;
     listener[numconns].events = POLLIN;

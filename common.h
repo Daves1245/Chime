@@ -1,4 +1,8 @@
 #include <inttypes.h>
+#include <time.h>
+#include <signal.h>
+
+#include "colors.h"
 
 // Arbitrary
 #define MAX_RECV_LEN 100
@@ -15,6 +19,15 @@
 #define UINT64_BASE10_LEN 21 // XXX rename this atrocity
 #define UINT32_BASE10_LEN 12 // XXX number of base10 digits needed to store all values of 32 bit integer
 
+#define FDISCONNECT 0x1
+#define FMSG 0x0
+
+pthread_t managerid;
+pthread_t senderid;
+pthread_t receiverid;
+
+int sfd;
+
 struct handlerinfo {
   int sfd;
   char *handle;
@@ -27,7 +40,7 @@ struct message {
   uint32_t flags;
 };
 
-void endconnection(int fd);                         /* Terminate the connection */
+void endconnection();                               /* Terminate the connection */
 void getinput(char *dest, size_t *res, size_t len); /* store '\n'-terminated line at most len into dest and modify *res accordingly */
 void *thread_recv(void *);                          /* Message receiving thread */
 void *thread_send(void *);                          /* Message sending thread */
@@ -87,6 +100,7 @@ void initsendmsg(int sfd) {
 /* Unpack struct, send each field as char stream */
 int sendmessage(int sfd, struct message *msg) {
   // initsendmsg(sfd);
+
 
   char hash[HASH_LEN];
   char id[UINT64_BASE10_LEN + 1]; // +1 for ':' delimiter
@@ -152,10 +166,13 @@ int recvmessage(int sfd, struct message *msg) {
  * XXX - implement actual end connection protocol
  * - check for recognition of logging off
  */
-void endconnection(int fd) {
-  char buff[] = "END";
-  send(fd, buff, sizeof buff, 0);
-  close(fd);
+void endconnection(void) {
+  char buff[] = "/exit";
+  send(sfd, buff, sizeof buff, 0);
+  close(sfd);
+  pthread_kill(managerid, SIGKILL);
+  pthread_kill(senderid, SIGKILL);
+  pthread_kill(receiverid, SIGKILL);
 }
 
 // get sockaddr, IPv4 or IPv6
@@ -171,7 +188,7 @@ void getinput(char *dest, size_t *res, size_t len) {
   int c;
   for (int i = 0; i < len; i++) {
     c = getchar();
-    if (c == '\n') {
+    if (c == '\n' || c == EOF) {
       *res = i + 1;
       break;
     }
@@ -189,8 +206,7 @@ void *thread_recv_old(void *sfdp) {
       break;
     }
     if (strcmp(buff, "exit") == 0) {
-      printf("exiting.\n");
-      endconnection(sfd);
+      endconnection();
       break;
     }
     printf("\n%s\n", buff);
@@ -198,17 +214,24 @@ void *thread_recv_old(void *sfdp) {
   return NULL; // XXX pthread_exit(retvalue);
 }
 
-void *thread_recv(void *sfdp) {
-  int sfd = *((int *)sfdp);
+void *thread_recv(void *handlei) {
+  struct handlerinfo *info = handlei;
   struct message msg;
   while (1) {
-    recvmessage(sfd, &msg);
-    printf("[%s]: %s\n", msg.from, msg.text);
+    recvmessage(info->sfd, &msg);
+    switch (msg.flags) {
+      case FDISCONNECT:
+        printf(YELLOW "[%s left the chat]\n" ANSI_RESET, msg.from);
+        break;
+      case FMSG:
+        printf(CYAN "[%s]" ANSI_RESET ": %s\n", msg.from, msg.text);
+        break;
+    }
   }
 }
 
-void *thread_send(void *sfdp) {
-  struct handlerinfo *info = sfdp;
+void *thread_send(void *handlei) {
+  struct handlerinfo *info = handlei;
   struct message msg;
   size_t msgtextlen;
 
@@ -221,17 +244,21 @@ void *thread_send(void *sfdp) {
   listener.events = POLLIN; // wait till we have input
 
   while (1) {
-    /* Prompt and wait for input */
-    printf(":");
     poll(&listener, 1, -1); // block until we can read
     if (listener.revents == POLLIN) {
       /* XXX Grab input, check for exit */
       getinput(msg.text, &msgtextlen, MAX_TEXT_LEN);
       msg.id++;
       sendmessage(info->sfd, &msg);
+      if (strcmp(msg.text, "/exit") == 0) {
+        /* Tell the manager thread to kill the connection */
+        endconnection();
+      }
     }
   }
 }
+
+/* deprecated */
 void *thread_send_old(void *sfdp) {
   int sfd = *((int *)sfdp);
   char buff[MAX_SEND_LEN];
@@ -243,15 +270,13 @@ void *thread_send_old(void *sfdp) {
   listener.events = POLLIN; // wait till we have input
 
   while (1) {
-    /* Prompt and wait for input */
-    printf(":");
     poll(&listener, 1, -1); // block until we can read
     if (listener.revents == POLLIN) { 
       /* Grab input, check for exit */
       getinput(buff, &msglen, MAX_SEND_LEN);
       if (strcmp(buff, "exit") == 0) {
         printf("exiting.\n");
-        endconnection(sfd);
+        endconnection();
         break;
       }
 
@@ -271,14 +296,14 @@ void *thread_send_old(void *sfdp) {
 }
 
 void *connection_handler(void *arg) {
-  pthread_t sender, receiver;
+  managerid = pthread_self();
 
-  if (pthread_create(&sender, NULL, thread_send, arg)) {
+  if (pthread_create(&senderid, NULL, thread_send, arg)) {
     fprintf(stderr, "Could not create message sending thread\n");
     perror("pthread_create");
     return NULL; // XXX pthread_exit(retvalue)
   }
-  if (pthread_create(&receiver, NULL, thread_recv, arg)) {
+  if (pthread_create(&receiverid, NULL, thread_recv, arg)) {
     fprintf(stderr, "Could not create message receiving thread\n");
     perror("pthread_create");
     // XXX kill sender thread 
@@ -286,8 +311,8 @@ void *connection_handler(void *arg) {
   }
 
   // XXX failure should kill all threads
-  pthread_join(sender, NULL);
-  pthread_join(receiver, NULL);
+  pthread_join(senderid, NULL);
+  pthread_join(receiverid, NULL);
 
   return NULL; // XXX pthread_exit(retvalue);
 }
