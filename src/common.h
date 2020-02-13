@@ -80,8 +80,8 @@ int tryrecv(int fd, void *buff, size_t bufflen) {
     if (recvd < 0) {
       perror("recv");
       return errno;
-    } else {
-      printf("recvd != bufflen, inside tryrecv function\n");
+    } else if (recvd == 0) {
+      printf(RED "Connection has closed, cannot send" ANSI_RESET "\n");
       return errno;
     }
   }
@@ -177,11 +177,12 @@ void endconnection(void) {
   struct message tmp;
   memset(&tmp, 0, sizeof tmp);
   tmp.flags = FDISCONNECT;
+  printf("test1\n");
   trysend(sfd, &tmp, sizeof tmp);
+  printf("test2\n");
   close(sfd);
-  pthread_kill(managerid, SIGTERM);
-  pthread_kill(senderid, SIGTERM);
-  pthread_kill(receiverid, SIGTERM);
+  printf("Disconnected\n");
+  exit(EXIT_SUCCESS);
 }
 
 // get sockaddr, IPv4 or IPv6
@@ -263,8 +264,7 @@ void *thread_send(void *handlei) {
       msg.id++;
       sendmessage(info->sfd, &msg);
       if (strcmp(msg.text, "/exit") == 0) {
-        /* Tell the manager thread to kill the connection */
-        endconnection();
+        exit(EXIT_SUCCESS);
       }
     }
   }
@@ -308,6 +308,8 @@ void *thread_send_old(void *sfdp) {
 }
 
 void *connection_handler(void *arg) {
+  managerid = pthread_self();
+
   if (pthread_create(&senderid, NULL, thread_send, arg)) {
     fprintf(stderr, "Could not create message sending thread\n");
     perror("pthread_create");

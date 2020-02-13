@@ -18,10 +18,6 @@
 
 int main(int argc, char **argv) {
 
-  char handle[MAX_NAME_LEN + 1];
-  printf("handle:");
-  scanf("%s", handle);
-
   int sockfd;
   struct addrinfo hints, *servinfo, *p;
   int rv;
@@ -60,10 +56,14 @@ int main(int argc, char **argv) {
   }
 
   inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr), s, sizeof s);
-  printf("connecting to %s\n", s);
+  printf(GREEN "Connected to %s\n" ANSI_RESET, s);
   freeaddrinfo(servinfo); // all done with this structure 
 
   /* Tell the server who we are */
+  char handle[MAX_NAME_LEN + 1];
+  printf("handle:");
+  scanf("%s", handle);
+
   struct message msg;
   memset(&msg, 0, sizeof msg);
   memcpy(msg.from, handle, sizeof handle);
