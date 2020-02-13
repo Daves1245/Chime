@@ -1,7 +1,0 @@
-A server is a manager of connections
-A connection is a series of messages between clients
-A message encapsulates an object of communication
-
-The server completes its task by assigning the management of a
-connection to a connection handler, which then 
-

@@ -63,6 +63,12 @@ int main(int argc, char **argv) {
   printf("connecting to %s\n", s);
   freeaddrinfo(servinfo); // all done with this structure 
 
+  /* Tell the server who we are */
+  struct message msg;
+  memset(&msg, 0, sizeof msg);
+  memcpy(msg.from, handle, sizeof handle);
+  trysend(sockfd, &msg, sizeof msg);
+
   pthread_t handler;
   struct handlerinfo info;
   info.sfd = sockfd;

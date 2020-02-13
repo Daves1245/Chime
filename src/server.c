@@ -60,6 +60,9 @@ void broadcast(const char *msg, size_t msglen) {
 }
 
 void broadcastmsg(struct message *m) {
+  char logbuff[100 + MAX_TEXT_LEN];
+  sprintf(logbuff, BLUE "BROADCAST: " ANSI_RESET "%s", m->text);
+  logs(logbuff);
   for (int i = 0; i < numconns; i++) {
     if (listener[i].fd > 0) {
       sendmessage(listener[i].fd, m);
@@ -92,8 +95,6 @@ void *manager(void *arg) {
         logs(logbuff);
 
         broadcastmsg(&m);
-        sprintf(logbuff, BLUE "BROADCAST: " ANSI_RESET "%s", m.text);
-        logs(logbuff);
 
         /*size_t numbytes;
           if ((numbytes = recv(listener[i].fd, buff, MAX_RECV_LEN, 0)) == -1) {
@@ -189,8 +190,14 @@ int main(int argc, char **argv) {
 
     inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *) &their_addr), s, sizeof s);
     // XXX add var args to logs 
+    struct message tmp;
+    memset(&tmp, 0, sizeof tmp);
+    tryrecv(new_fd, &tmp, sizeof tmp); /* XXX add error checking */
+    tmp.flags = FCONNECT;
+    broadcastmsg(&tmp);
+
     char buff[100]; // arbitrary tmp hack fix 
-    sprintf(buff, GREEN "Connection from %s", s);
+    sprintf(buff, "%s connected from %s", tmp.from, s);
     logs(buff);
 
     listener[numconns].fd = new_fd;

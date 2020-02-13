@@ -19,8 +19,9 @@
 #define UINT64_BASE10_LEN 21 // XXX rename this atrocity
 #define UINT32_BASE10_LEN 12 // XXX number of base10 digits needed to store all values of 32 bit integer
 
-#define FDISCONNECT 0x1
 #define FMSG 0x0
+#define FCONNECT 0x1
+#define FDISCONNECT 0x2
 
 pthread_t managerid;
 pthread_t senderid;
@@ -38,6 +39,12 @@ struct message {
   char from[MAX_NAME_LEN + 1];
   char text[MAX_TEXT_LEN + 1];
   uint32_t flags;
+};
+
+struct user {
+  uint16_t userid;
+  char handle[MAX_NAME_LEN + 1];
+  // XXX add friends
 };
 
 void endconnection();                               /* Terminate the connection */
@@ -167,12 +174,14 @@ int recvmessage(int sfd, struct message *msg) {
  * - check for recognition of logging off
  */
 void endconnection(void) {
-  char buff[] = "/exit";
-  send(sfd, buff, sizeof buff, 0);
+  struct message tmp;
+  memset(&tmp, 0, sizeof tmp);
+  tmp.flags = FDISCONNECT;
+  trysend(sfd, &tmp, sizeof tmp);
   close(sfd);
-  pthread_kill(managerid, SIGKILL);
-  pthread_kill(senderid, SIGKILL);
-  pthread_kill(receiverid, SIGKILL);
+  pthread_kill(managerid, SIGTERM);
+  pthread_kill(senderid, SIGTERM);
+  pthread_kill(receiverid, SIGTERM);
 }
 
 // get sockaddr, IPv4 or IPv6
@@ -221,7 +230,10 @@ void *thread_recv(void *handlei) {
     recvmessage(info->sfd, &msg);
     switch (msg.flags) {
       case FDISCONNECT:
-        printf(YELLOW "[%s left the chat]\n" ANSI_RESET, msg.from);
+        printf(YELLOW "[%s left the chat]" ANSI_RESET "\n", msg.from);
+        break;
+      case FCONNECT:
+        printf(YELLOW "[%s entered the chat]" ANSI_RESET "\n", msg.from);
         break;
       case FMSG:
         printf(CYAN "[%s]" ANSI_RESET ": %s\n", msg.from, msg.text);
@@ -296,8 +308,6 @@ void *thread_send_old(void *sfdp) {
 }
 
 void *connection_handler(void *arg) {
-  managerid = pthread_self();
-
   if (pthread_create(&senderid, NULL, thread_send, arg)) {
     fprintf(stderr, "Could not create message sending thread\n");
     perror("pthread_create");
