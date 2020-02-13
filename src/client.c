@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
   char s[INET6_ADDRSTRLEN];
 
   if (argc != 2) {
-    fprintf(stderr, "usage: client [HOSTNAME]\n");
+    fprintf(stderr, RED "usage: client [HOSTNAME]\n" ANSI_RESET);
     exit(1);
   }
 
@@ -37,6 +37,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  printf("Attempting to connect...\n");
   // loop through all the results and connect to the first we can
   for (p = servinfo; p != NULL; p = p->ai_next) {
     if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
@@ -54,10 +55,13 @@ int main(int argc, char **argv) {
     fprintf(stderr, "client: failed to connect\n");
     return 2;
   }
-
   inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr), s, sizeof s);
+
   printf(GREEN "Connected to %s\n" ANSI_RESET, s);
   freeaddrinfo(servinfo); // all done with this structure 
+
+  pthread_t handler;
+  struct handlerinfo info;
 
   /* Tell the server who we are */
   char handle[MAX_NAME_LEN + 1];
@@ -68,9 +72,6 @@ int main(int argc, char **argv) {
   memset(&msg, 0, sizeof msg);
   memcpy(msg.from, handle, sizeof handle);
   trysend(sockfd, &msg, sizeof msg);
-
-  pthread_t handler;
-  struct handlerinfo info;
   info.sfd = sockfd;
   info.handle = handle;
 
