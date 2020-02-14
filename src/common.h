@@ -1,3 +1,5 @@
+#define DEBUG 1
+
 #include <inttypes.h>
 #include <time.h>
 #include <signal.h>
@@ -185,6 +187,12 @@ void endconnection(void) {
   exit(EXIT_SUCCESS);
 }
 
+void sighandler(int s) {
+  if (s == SIGTERM) {
+    endconnection();
+  }
+}
+
 // get sockaddr, IPv4 or IPv6
 void *get_in_addr(struct sockaddr *sa) {
   if (sa->sa_family == AF_INET) {
@@ -229,6 +237,9 @@ void *thread_recv(void *handlei) {
   struct message msg;
   while (1) {
     recvmessage(info->sfd, &msg);
+#ifdef DEBUG
+    printf("msg flags: %d\n", msg.flags);
+#endif
     switch (msg.flags) {
       case FDISCONNECT:
         printf(YELLOW "[%s left the chat]" ANSI_RESET "\n", msg.from);
@@ -249,9 +260,8 @@ void *thread_send(void *handlei) {
   size_t msgtextlen;
 
   memset(&msg, 0, sizeof msg);
-  memcpy(msg.from, "HELLO\0", 6);
-  strcpy(msg.from, info->handle);
-
+  memcpy(msg.from, info->handle, strlen(info->handle));
+  
   struct pollfd listener;
   listener.fd = 0; // poll for stdin
   listener.events = POLLIN; // wait till we have input

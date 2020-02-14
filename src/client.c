@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
   memset(&msg, 0, sizeof msg);
   memcpy(msg.from, handle, sizeof handle);
   trysend(sockfd, &msg, sizeof msg);
+
   info.sfd = sockfd;
   info.handle = handle;
 

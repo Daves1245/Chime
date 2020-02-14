@@ -119,6 +119,10 @@ int main(int argc, char **argv) {
   char s[INET6_ADDRSTRLEN];
   int rv;
 
+  char logbuff[100];
+  sprintf(logbuff, "Creating server on port %s", PORT); // XXX logs var args
+  logs(logbuff);
+
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_STREAM;
@@ -146,10 +150,10 @@ int main(int argc, char **argv) {
       perror("server: bind");
       continue;
     }
-
     break;
   }
 
+  logs(GREEN "Server setup " ANSI_RESET);
   freeaddrinfo(servinfo); // all done with this structure
 
   if (p == NULL) {
