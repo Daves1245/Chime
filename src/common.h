@@ -25,10 +25,18 @@
 #define FCONNECT 0x1
 #define FDISCONNECT 0x2
 
+/***********
+ * XXX TODO
+ * - user profiles 
+ * - timestamp messages 
+ * - implement message hashing
+ * - chat storing (locally and server side)
+ * - more user commands
+ ***********/
+
 pthread_t managerid;
 pthread_t senderid;
 pthread_t receiverid;
-
 int sfd;
 
 struct handlerinfo {
@@ -187,6 +195,11 @@ void endconnection(void) {
   exit(EXIT_SUCCESS);
 }
 
+/*
+ *the more i work on this the more i realize i'm
+ just making a bad IRC clone for C.
+ */
+// XXX
 void sighandler(int s) {
   if (s == SIGTERM) {
     endconnection();
