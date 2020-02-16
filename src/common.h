@@ -104,10 +104,10 @@ int sendmessage(int sfd, struct message *msg) {
   id[UINT64_BASE10_LEN] = ':';
   flags[UINT32_BASE10_LEN] = ':';
 
-  send(sfd, id, sizeof id, 0);
+  send(sfd, id, UINT64_BASE10_LEN + 1, 0);
   send(sfd, msg->from, MAX_NAME_LEN + 1, 0);
   send(sfd, msg->text, MAX_TEXT_LEN + 1, 0);
-  send(sfd, flags, sizeof flags, 0);
+  send(sfd, flags, UINT32_BASE10_LEN + 1, 0);
   return 0; // XXX not finished
 }
 
@@ -135,7 +135,7 @@ int recvmessage(int sfd, struct message *msg) {
   msg->text[MAX_TEXT_LEN] = '\0';
   msg->flags = atoll(flags);
 
-#ifdef DEBUG
+#ifdef DEBUG_RECVMSG
   printf("[MSG] id %" PRIu64 "\n", msg->id);
   printf("[MSG] from %s\n", msg->from);
   printf("[MSG] text %s\n", msg->text);
