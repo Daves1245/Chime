@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-
-=======
->>>>>>> 3126b7f1adc8f81df8b7371294552cf232d11ae2
 #define DEBUG 1
 
 // Arbitrary
