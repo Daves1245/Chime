@@ -98,6 +98,13 @@ void *manager(void *arg) {
 
         sprintf(logbuff, YELLOW "received msg from %s", m.from);
         logs(logbuff);
+	
+#ifdef DEBUG
+	printf("\t\t[id]: %" PRIu64 "\n", m.id);
+	printf("\t\t[from]: %s\n", m.from);
+	printf("\t\t[text]: %s\n", m.text);
+	printf("\t\t[flags]: %" PRIu32 "\n", m.flags);
+#endif
 
         broadcastmsg(&m);
 
