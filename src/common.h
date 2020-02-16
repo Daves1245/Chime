@@ -1,29 +1,10 @@
-#define DEBUG 1
-
 #include <inttypes.h>
 #include <time.h>
 #include <signal.h>
 
 #include "colors.h"
 
-// Arbitrary
-#define MAX_RECV_LEN 100
-#define MAX_SEND_LEN 100
-
-#define MAX_PACKET_PAYLOAD_SIZE 1400
-#define MAX_PACKETS_PER_MSG 256 // handle input up to 358400 bytes long
-
-#define MAX_NAME_LEN 30
-#define MAX_TEXT_LEN 3000
-
-#define HASH_LEN 256 // length of hash
-
-#define UINT64_BASE10_LEN 21 // XXX rename this atrocity
-#define UINT32_BASE10_LEN 12 // XXX number of base10 digits needed to store all values of 32 bit integer
-
-#define FMSG 0x0
-#define FCONNECT 0x1
-#define FDISCONNECT 0x2
+#include "defs.h"
 
 /***********
  * XXX TODO
@@ -34,9 +15,6 @@
  * - more user commands
  ***********/
 
-pthread_t managerid;
-pthread_t senderid;
-pthread_t receiverid;
 int sfd;
 
 struct handlerinfo {
@@ -54,7 +32,7 @@ struct message {
 struct user {
   uint16_t userid;
   char handle[MAX_NAME_LEN + 1];
-  // XXX add friends
+  // XXX friends
 };
 
 void endconnection();                               /* Terminate the connection */
@@ -104,20 +82,13 @@ void hashmsg(struct message *msg, char *res) {
   return;
 }
 
-/*
- * purpose: send type of data being sent first
- * "MSG", "REQ", "ACK", "STP", etc.
- * for message, request, ack, stamp, respectively.
- * make this for each message-encapsulating type
- */
-void initsendmsg(int sfd) {
-  trysend(sfd, "MSG:", sizeof "MSG:");
+static inline void initmsg(int sfd) {
+  send(sfd, "MSG:", 4, 0);
 }
 
 /* Unpack struct, send each field as char stream */
 int sendmessage(int sfd, struct message *msg) {
-  // initsendmsg(sfd);
-
+  initmsg(sfd);
 
   char hash[HASH_LEN];
   char id[UINT64_BASE10_LEN + 1]; // +1 for ':' delimiter
@@ -131,17 +102,10 @@ int sendmessage(int sfd, struct message *msg) {
   id[UINT64_BASE10_LEN] = ':';
   flags[UINT32_BASE10_LEN] = ':';
 
-#ifdef DEBUG
-  printf("[DEBUG]: id `%s`\n", id);
-  printf("[DEBUG]: flags `%s`\n", flags);
-  printf("[DEBUG]: from `%s`\n", msg->from);
-  printf("[DEBUG]: text `%s`\n", msg->text);
-#endif
-
-  trysend(sfd, id, sizeof id);
-  trysend(sfd, msg->from, MAX_NAME_LEN + 1);
-  trysend(sfd, msg->text, MAX_TEXT_LEN + 1);
-  trysend(sfd, flags, sizeof flags);
+  send(sfd, id, sizeof id, 0);
+  send(sfd, msg->from, MAX_NAME_LEN + 1, 0);
+  send(sfd, msg->text, MAX_TEXT_LEN + 1, 0);
+  send(sfd, flags, sizeof flags, 0);
   return 0; // XXX not finished
 }
 
@@ -187,9 +151,7 @@ void endconnection(void) {
   struct message tmp;
   memset(&tmp, 0, sizeof tmp);
   tmp.flags = FDISCONNECT;
-  printf("test1\n");
   trysend(sfd, &tmp, sizeof tmp);
-  printf("test2\n");
   close(sfd);
   printf("Disconnected\n");
   exit(EXIT_SUCCESS);
@@ -226,23 +188,6 @@ void getinput(char *dest, size_t *res, size_t len) {
     dest[i] = c;
   }
   dest[*res - 1] = '\0';
-}
-
-void *thread_recv_old(void *sfdp) {
-  int sfd = *((int *)sfdp);
-  char buff[MAX_RECV_LEN];
-  while (1) {
-    if (recv(sfd, buff, MAX_RECV_LEN, 0) == -1) {
-      perror("recv");
-      break;
-    }
-    if (strcmp(buff, "exit") == 0) {
-      endconnection();
-      break;
-    }
-    printf("\n%s\n", buff);
-  }
-  return NULL; // XXX pthread_exit(retvalue);
 }
 
 void *thread_recv(void *handlei) {
@@ -284,6 +229,9 @@ void *thread_send(void *handlei) {
     if (listener.revents == POLLIN) {
       /* XXX Grab input, check for exit */
       getinput(msg.text, &msgtextlen, MAX_TEXT_LEN);
+      if (msgtextlen == 0) {
+        memcpy(msg.text, "/exit", 5);
+      }
       msg.id++;
       sendmessage(info->sfd, &msg);
       if (strcmp(msg.text, "/exit") == 0) {
@@ -291,63 +239,4 @@ void *thread_send(void *handlei) {
       }
     }
   }
-}
-
-/* deprecated */
-void *thread_send_old(void *sfdp) {
-  int sfd = *((int *)sfdp);
-  char buff[MAX_SEND_LEN];
-  size_t msglen;
-  int s;
-
-  struct pollfd listener;
-  listener.fd = 0; // poll for stdin
-  listener.events = POLLIN; // wait till we have input
-
-  while (1) {
-    poll(&listener, 1, -1); // block until we can read
-    if (listener.revents == POLLIN) { 
-      /* Grab input, check for exit */
-      getinput(buff, &msglen, MAX_SEND_LEN);
-      if (strcmp(buff, "exit") == 0) {
-        printf("exiting.\n");
-        endconnection();
-        break;
-      }
-
-      /* Send the message */
-      if ((s = send(sfd, buff, msglen, 0)) != msglen) {
-        if (s < 0) {
-          perror("send");
-          break;
-        } else {
-          perror("incomplete send");
-          break;
-        }
-      }
-    }
-  }
-  return NULL; // XXX thread_exit(retvalue);
-}
-
-void *connection_handler(void *arg) {
-  managerid = pthread_self();
-
-  if (pthread_create(&senderid, NULL, thread_send, arg)) {
-    fprintf(stderr, "Could not create message sending thread\n");
-    perror("pthread_create");
-    return NULL; // XXX pthread_exit(retvalue)
-  }
-  if (pthread_create(&receiverid, NULL, thread_recv, arg)) {
-    fprintf(stderr, "Could not create message receiving thread\n");
-    perror("pthread_create");
-    // XXX kill sender thread 
-    return NULL; // XXX pthread_exit(retvalue);
-  }
-
-  // XXX failure should kill all threads
-  pthread_join(senderid, NULL);
-  pthread_join(receiverid, NULL);
-
-  return NULL; // XXX pthread_exit(retvalue);
 }

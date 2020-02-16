@@ -60,7 +60,6 @@ int main(int argc, char **argv) {
   printf(GREEN "Connected to %s\n" ANSI_RESET, s);
   freeaddrinfo(servinfo); // all done with this structure 
 
-  pthread_t handler;
   struct handlerinfo info;
 
   /* Tell the server who we are */
@@ -76,14 +75,24 @@ int main(int argc, char **argv) {
   info.sfd = sockfd;
   info.handle = handle;
 
-  if (pthread_create(&handler, NULL, connection_handler, &info)) {
-    fprintf(stderr, "Could not create handler for connection\n");
-    perror("perror_create");
+  pthread_t sendertid;
+  pthread_t receivertid;
+
+  if (pthread_create(&sendertid, NULL, thread_send, &info)) {
+    fprintf(stderr, "Could not create msg sender thread\n");
+    perror("pthread_create");
     exit(EXIT_FAILURE);
   }
 
-  /* Join handler with main on termination, then exit */
-  pthread_join(handler, NULL);
+  if (pthread_create(&receivertid, NULL, thread_recv, &info)) {
+    fprintf(stderr, "Could not create msg receiving thread\n");
+    perror("pthread_create");
+    exit(EXIT_FAILURE);
+  }
+
+  /* Join threads (end the connection) to main, and exit */
+  pthread_join(sendertid, NULL);
+  pthread_join(receivertid, NULL);
 
   close(sockfd);
   return 0;

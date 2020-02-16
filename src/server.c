@@ -78,31 +78,37 @@ void *manager(void *arg) {
     for (int i = 0; i < numconns; i++) {
       char logbuff[100 + MAX_TEXT_LEN]; // XXX make logs var args. tmp hack fix
       if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
-        recvmessage(listener[i].fd, &m);
-
-        if (strcmp(m.text, "/exit") == 0) {
-          sprintf(logbuff, "Disconnecting client on socket fd: %d", listener[i].fd); // XXX var args logs
-          close(listener[i].fd);
-          listener[i].fd *= -1; // remove from poll() query 
-          logs(logbuff);
-          sprintf(logbuff, "user %s disconnected", m.from);
-          logs(logbuff);
-
-          m.flags = FDISCONNECT;
+        char header[HEADER_LEN];
+        if (recv(listener[i].fd, header, HEADER_LEN, 0) == 0) {
+          listener[i].fd = -1;
+          continue;
         }
+        if (strcmp(header, "MSG:") == 0) {
+          recvmessage(listener[i].fd, &m);
+          if (strcmp(m.text, "/exit") == 0) {
+            sprintf(logbuff, "Disconnecting client on socket fd: %d", listener[i].fd); // XXX var args logs
+            close(listener[i].fd);
+            listener[i].fd = -1; // remove from poll() query 
+            logs(logbuff);
+            sprintf(logbuff, "user %s disconnected", m.from);
+            logs(logbuff);
 
-        sprintf(logbuff, YELLOW "received msg from %s", m.from);
-        logs(logbuff);
+            m.flags = FDISCONNECT;
+          }
 
-        broadcastmsg(&m);
+          sprintf(logbuff, YELLOW "received msg from %s", m.from);
+          logs(logbuff);
 
-        /*size_t numbytes;
-          if ((numbytes = recv(listener[i].fd, buff, MAX_RECV_LEN, 0)) == -1) {
-          perror("recv");
-          break;
-          }*/
-        //broadcast(buff, numbytes);
-        memset(buff, '\0', MAX_RECV_LEN);
+          broadcastmsg(&m);
+
+          /*size_t numbytes;
+            if ((numbytes = recv(listener[i].fd, buff, MAX_RECV_LEN, 0)) == -1) {
+            perror("recv");
+            break;
+            }*/
+          //broadcast(buff, numbytes);
+          memset(buff, '\0', MAX_RECV_LEN);
+        }
       }
     } // end msg searching loop 
   }
@@ -182,7 +188,7 @@ int main(int argc, char **argv) {
 
   // puts(GREEN "Manager thread created" ANSI_RESET);
   logs(GREEN "Manager thread created" ANSI_RESET);
-  logs("Waiting for connections...\n");
+  logs("Waiting for connections...");
   while (1) { // main accept() loop
     sin_size = sizeof their_addr;
     new_fd = accept(sockfd, (struct sockaddr *) &their_addr, &sin_size);
