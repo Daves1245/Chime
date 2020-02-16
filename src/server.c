@@ -77,7 +77,7 @@ void *manager(void *arg) {
     poll(listener, numconns, 1);
     for (int i = 0; i < numconns; i++) {
 #ifdef DEBUG
-	  printf("NUMBER OF CONNECTIONS: %d\n", numconns);
+      printf("NUMBER OF CONNECTIONS: %d\n", numconns);
 #endif
       char logbuff[100 + MAX_TEXT_LEN]; // XXX make logs var args. tmp hack fix
       if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
@@ -101,12 +101,12 @@ void *manager(void *arg) {
 
         sprintf(logbuff, YELLOW "received msg from %s", m.from);
         logs(logbuff);
-	
+
 #ifdef DEBUG
-	printf("\t\t[id]: %" PRIu64 "\n", m.id);
-	printf("\t\t[from]: %s\n", m.from);
-	printf("\t\t[text]: %s\n", m.text);
-	printf("\t\t[flags]: %" PRIu32 "\n", m.flags);
+        printf("\t\t[id]: %" PRIu64 "\n", m.id);
+        printf("\t\t[from]: %s\n", m.from);
+        printf("\t\t[text]: %s\n", m.text);
+        printf("\t\t[flags]: %" PRIu32 "\n", m.flags);
 #endif
 
         broadcastmsg(&m);
