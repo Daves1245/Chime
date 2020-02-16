@@ -24,8 +24,8 @@ struct handlerinfo {
 
 struct message {
   uint64_t id;
-  char from[MAX_NAME_LEN + 1];
-  char text[MAX_TEXT_LEN + 1];
+  char from[MAX_NAME_LEN + 1]; // +1 for null byte
+  char text[MAX_TEXT_LEN + 1]; // +1 for null byte
   uint32_t flags;
 };
 
@@ -86,28 +86,24 @@ static inline void initmsg(int sfd) {
   send(sfd, "MSG:", 4, 0);
 }
 
-static int count;
 /* Unpack struct, send each field as char stream */
 int sendmessage(int sfd, struct message *msg) {
-  printf("sendmessage: %d\n", count++);
   //initmsg(sfd);
 
   char hash[HASH_LEN];
-  char id[UINT64_BASE10_LEN + 1]; // +1 for ':' delimiter
-  char flags[UINT32_BASE10_LEN + 1];
+  char id[UINT64_BASE10_LEN + 1]; // +1 for sprintf's null byte 
+  char flags[UINT32_BASE10_LEN + 1]; //+1 for sprintf's null byte
 
   hashmsg(msg, hash);
 
   sprintf(id, "%012" PRIu64, msg->id);
   sprintf(flags, "%012" PRIu32, msg->flags);
 
-  id[UINT64_BASE10_LEN] = ':';
-  flags[UINT32_BASE10_LEN] = ':';
-
-  send(sfd, id, UINT64_BASE10_LEN + 1, 0);
-  send(sfd, msg->from, MAX_NAME_LEN + 1, 0);
-  send(sfd, msg->text, MAX_TEXT_LEN + 1, 0);
-  send(sfd, flags, UINT32_BASE10_LEN + 1, 0);
+  /* Do not send null bytes */
+  send(sfd, id, UINT64_BASE10_LEN, 0);
+  send(sfd, msg->from, MAX_NAME_LEN, 0);
+  send(sfd, msg->text, MAX_TEXT_LEN, 0);
+  send(sfd, flags, UINT32_BASE10_LEN, 0);
   return 0; // XXX not finished
 }
 
@@ -118,15 +114,15 @@ int sendmessage(int sfd, struct message *msg) {
  * "
  */
 int recvmessage(int sfd, struct message *msg) {
-  char id[UINT64_BASE10_LEN + 1]; // +1 for ':' delimiter
-  char from[MAX_NAME_LEN + 1]; // +1 for ':' delimiter
-  char text[MAX_TEXT_LEN + 1]; // +1 for ':' delimiter
-  char flags[UINT32_BASE10_LEN + 1]; // +1 for ':' delimiter
+  char id[UINT64_BASE10_LEN]; 
+  char from[MAX_NAME_LEN];
+  char text[MAX_TEXT_LEN];
+  char flags[UINT32_BASE10_LEN];
 
-  tryrecv(sfd, id, sizeof id);
-  tryrecv(sfd, from, sizeof from);
-  tryrecv(sfd, text, sizeof text);
-  tryrecv(sfd, flags, sizeof flags);
+  tryrecv(sfd, id, UINT64_BASE10_LEN);
+  tryrecv(sfd, from, MAX_NAME_LEN);
+  tryrecv(sfd, text, MAX_TEXT_LEN);
+  tryrecv(sfd, flags, UINT32_BASE10_LEN);
 
   msg->id = atoll(id);
   memcpy(msg->from, from, MAX_NAME_LEN);
@@ -192,6 +188,10 @@ void getinput(char *dest, size_t *res, size_t len) {
   dest[*res - 1] = '\0';
 }
 
+void displaymessage(const struct message *msg) {
+  printf(CYAN "[%s]" ANSI_RESET ": %s\n", msg->from, msg->text);
+}
+
 void *thread_recv(void *handlei) {
   struct handlerinfo *info = handlei;
   struct message msg;
@@ -212,8 +212,12 @@ void *thread_recv(void *handlei) {
 		    printf(YELLOW "[%s entered the chat]" ANSI_RESET "\n", msg.from);
 		    break;
 	    case FMSG:
-		    printf(CYAN "[%s]" ANSI_RESET ": %s\n", msg.from, msg.text);
+        displaymessage(&msg);
 		    break;
+      default:
+        printf("invalid flag in msg, defaulting to displaymsg\n");
+        displaymessage(&msg);
+        break;
     }
   }
 }

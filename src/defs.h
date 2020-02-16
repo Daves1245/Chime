@@ -1,4 +1,7 @@
-#define DEBUG 1
+//#define DEBUG 1
+// debug flags
+
+#define DEBUG_RECVMSG 1
 
 // Arbitrary
 #define HEADER_LEN 4
