@@ -88,7 +88,7 @@ static inline void initmsg(int sfd) {
 
 /* Unpack struct, send each field as char stream */
 int sendmessage(int sfd, struct message *msg) {
-  initmsg(sfd);
+  //initmsg(sfd);
 
   char hash[HASH_LEN];
   char id[UINT64_BASE10_LEN + 1]; // +1 for ':' delimiter
