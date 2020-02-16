@@ -100,10 +100,18 @@ int sendmessage(int sfd, struct message *msg) {
   sprintf(flags, "%012" PRIu32, msg->flags);
 
   /* Do not send null bytes */
-  send(sfd, id, UINT64_BASE10_LEN, 0);
-  send(sfd, msg->from, MAX_NAME_LEN, 0);
-  send(sfd, msg->text, MAX_TEXT_LEN, 0);
-  send(sfd, flags, UINT32_BASE10_LEN, 0);
+  if (send(sfd, id, UINT64_BASE10_LEN, 0) != UINT64_BASE10_LEN) {
+    fprintf(stderr, RED "MSG ID not sent completely" ANSI_RESET "\n");
+  }
+  if (send(sfd, msg->from, MAX_NAME_LEN, 0) != MAX_NAME_LEN) {
+    fprintf(stderr, RED "MSG from not sent completely" ANSI_RESET "\n");
+  }
+  if (send(sfd, msg->text, MAX_TEXT_LEN, 0) != MAX_TEXT_LEN) {
+    fprintf(stderr, RED "MSG text not sent completely" ANSI_RESET "\n");
+  }
+  if (send(sfd, flags, UINT32_BASE10_LEN, 0) != UINT32_BASE10_LEN) {
+    fprintf(stderr, RED "MSG flags not sent completely" ANSI_RESET "\n");
+  }
   return 0; // XXX not finished
 }
 
