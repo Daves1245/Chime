@@ -76,6 +76,9 @@ void *manager(void *arg) {
   while (1) {
     poll(listener, numconns, 1);
     for (int i = 0; i < numconns; i++) {
+#ifdef DEBUG
+	  printf("NUMBER OF CONNECTIONS: %d\n", numconns);
+#endif
       char logbuff[100 + MAX_TEXT_LEN]; // XXX make logs var args. tmp hack fix
       if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
         /*char header[HEADER_LEN];
