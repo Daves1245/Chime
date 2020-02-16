@@ -215,7 +215,7 @@ void *thread_recv(void *handlei) {
         displaymessage(&msg);
 		    break;
       default:
-        printf("invalid flag in msg, defaulting to displaymsg\n");
+        printf(RED "[invalid flags, defaulting to displaymsg]" ANSI_RESET "\n");
         displaymessage(&msg);
         break;
     }
