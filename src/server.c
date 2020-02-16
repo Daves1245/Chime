@@ -71,6 +71,21 @@ void broadcastmsg(struct message *m) {
 }
 
 void *manager(void *arg) {
+  while (1) {
+    poll(listener, numconns, 1);
+    for (int i = 0; i < numconns; i++) {
+      char buff[sizeof(struct message) + 1];
+      if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
+        printf("Reading from fd %d\n", listener[i].fd);  
+        printf("Bytes read: %ld\n", recv(listener[i].fd, buff, sizeof(struct message) + 1, 0));
+        buff[sizeof(struct message)] = '\0';
+        printf("Contents of fd %d: %s\n", listener[i].fd, buff);
+      }
+    }
+  }
+}
+
+void *manager_tmp(void *arg) {
   char buff[MAX_RECV_LEN];
   struct message m;
   while (1) {
