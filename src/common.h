@@ -136,10 +136,10 @@ int recvmessage(int sfd, struct message *msg) {
   msg->flags = atoll(flags);
 
 #ifdef DEBUG
-  printf("[RECEIVED] id %" PRIu64 "\n", msg->id);
-  printf("[RECEIVED] from %s\n", msg->from);
-  printf("[RECEIVED] text %s\n", msg->text);
-  printf("[RECEIVED] flags %" PRIu32 "\n", msg->flags);
+  printf("[MSG] id %" PRIu64 "\n", msg->id);
+  printf("[MSG] from %s\n", msg->from);
+  printf("[MSG] text %s\n", msg->text);
+  printf("[MSG] flags %" PRIu32 "\n", msg->flags);
 #endif
 
   return 0; // XXX not finished
@@ -198,47 +198,51 @@ void *thread_recv(void *handlei) {
   while (1) {
     recvmessage(info->sfd, &msg);
 #ifdef DEBUG
-    printf("msg flags: %d\n", msg.flags);
+    puts("[THREAD RECV]");
+    printf("[MSG] id %" PRIu64 "\n", msg.id);
+    printf("[MSG] from %s\n", msg.from);
+    printf("[MSG] text %s\n", msg.text);
+    printf("[MSG] flags %" PRIu32 "\n", msg.flags);
 #endif
     switch (msg.flags) {
-      case FDISCONNECT:
-        printf(YELLOW "[%s left the chat]" ANSI_RESET "\n", msg.from);
-        break;
-      case FCONNECT:
-        printf(YELLOW "[%s entered the chat]" ANSI_RESET "\n", msg.from);
-        break;
-      case FMSG:
-        printf(CYAN "[%s]" ANSI_RESET ": %s\n", msg.from, msg.text);
-        break;
+	    case FDISCONNECT:
+		    printf(YELLOW "[%s left the chat]" ANSI_RESET "\n", msg.from);
+		    break;
+	    case FCONNECT:
+		    printf(YELLOW "[%s entered the chat]" ANSI_RESET "\n", msg.from);
+		    break;
+	    case FMSG:
+		    printf(CYAN "[%s]" ANSI_RESET ": %s\n", msg.from, msg.text);
+		    break;
     }
   }
 }
 
 void *thread_send(void *handlei) {
-  struct handlerinfo *info = handlei;
-  struct message msg;
-  size_t msgtextlen;
+	struct handlerinfo *info = handlei;
+	struct message msg;
+	size_t msgtextlen;
 
-  memset(&msg, 0, sizeof msg);
-  memcpy(msg.from, info->handle, strlen(info->handle));
-  
-  struct pollfd listener;
-  listener.fd = 0; // poll for stdin
-  listener.events = POLLIN; // wait till we have input
+	memset(&msg, 0, sizeof msg);
+	memcpy(msg.from, info->handle, strlen(info->handle));
 
-  while (1) {
-    poll(&listener, 1, -1); // block until we can read
-    if (listener.revents == POLLIN) {
-      /* XXX Grab input, check for exit */
-      getinput(msg.text, &msgtextlen, MAX_TEXT_LEN);
-      if (msgtextlen == 0) {
-        memcpy(msg.text, "/exit", 5);
-      }
-      msg.id++;
-      sendmessage(info->sfd, &msg);
-      if (strcmp(msg.text, "/exit") == 0) {
-        exit(EXIT_SUCCESS);
-      }
-    }
-  }
+	struct pollfd listener;
+	listener.fd = 0; // poll for stdin
+	listener.events = POLLIN; // wait till we have input
+
+	while (1) {
+		poll(&listener, 1, -1); // block until we can read
+		if (listener.revents == POLLIN) {
+			/* XXX Grab input, check for exit */
+			getinput(msg.text, &msgtextlen, MAX_TEXT_LEN);
+			if (msgtextlen == 0) {
+				memcpy(msg.text, "/exit", 5);
+			}
+			msg.id++;
+			sendmessage(info->sfd, &msg);
+			if (strcmp(msg.text, "/exit") == 0) {
+				exit(EXIT_SUCCESS);
+			}
+		}
+	}
 }
