@@ -86,8 +86,10 @@ static inline void initmsg(int sfd) {
   send(sfd, "MSG:", 4, 0);
 }
 
+static int count;
 /* Unpack struct, send each field as char stream */
 int sendmessage(int sfd, struct message *msg) {
+  printf("sendmessage: %d\n", count++);
   //initmsg(sfd);
 
   char hash[HASH_LEN];

@@ -1,3 +1,6 @@
+
+#define DEBUG 1
+
 // Arbitrary
 #define HEADER_LEN 4
 #define MAX_RECV_LEN 100
