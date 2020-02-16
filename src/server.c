@@ -70,7 +70,7 @@ void broadcastmsg(struct message *m) {
   }
 }
 
-void *manager(void *arg) {
+void *manager_tmp(void *arg) {
   while (1) {
     poll(listener, numconns, 1);
     for (int i = 0; i < numconns; i++) {
@@ -85,7 +85,7 @@ void *manager(void *arg) {
   }
 }
 
-void *manager_tmp(void *arg) {
+void *manager(void *arg) {
   char buff[MAX_RECV_LEN];
   struct message m;
   while (1) {
