@@ -74,7 +74,7 @@ void *manager(void *arg) {
   char buff[MAX_RECV_LEN];
   struct message m;
   while (1) {
-    poll(listener, numconns, 0);
+    poll(listener, numconns, 1);
     for (int i = 0; i < numconns; i++) {
       char logbuff[100 + MAX_TEXT_LEN]; // XXX make logs var args. tmp hack fix
       if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
@@ -134,7 +134,12 @@ int main(int argc, char **argv) {
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
 
-  if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
+  if (argc >= 2) { // if port argument specifieds
+    if ((rv = getaddrinfo(NULL, argv[2], &hints, &servinfo)) != 0) {
+      fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+      return 1;
+    } 
+  } else if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
     return 1;
   }
