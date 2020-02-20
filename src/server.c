@@ -61,7 +61,7 @@ void broadcast(const char *msg, size_t msglen) {
 
 void broadcastmsg(struct message *m) {
   char logbuff[100 + MAX_TEXT_LEN];
-  sprintf(logbuff, BLUE "BROADCAST: " ANSI_RESET "%s", m->text);
+  sprintf(logbuff, BLUE "BROADCAST: " ANSI_RESET "%s", m->txt);
   logs(logbuff);
   for (int i = 0; i < numconns; i++) {
     if (listener[i].fd > 0) {
@@ -88,6 +88,7 @@ void *manager_tmp(void *arg) {
 void *manager(void *arg) {
   char buff[MAX_RECV_LEN];
   struct message m;
+  m.txt = malloc(MAX_TEXT_LEN);
   while (1) {
     poll(listener, numconns, 1);
     for (int i = 0; i < numconns; i++) {
@@ -103,7 +104,8 @@ void *manager(void *arg) {
           }
           if (strcmp(header, "MSG:") == 0) { */
         recvmessage(listener[i].fd, &m);
-        if (strcmp(m.text, "/exit") == 0) {
+        printf("contents of m.txt: %s\n", m.txt);
+        if (strcmp(m.txt, "/exit") == 0) {
           sprintf(logbuff, "Disconnecting client on socket fd: %d", listener[i].fd); // XXX var args logs
           close(listener[i].fd);
           listener[i].fd = -1; // remove from poll() query 
@@ -120,7 +122,7 @@ void *manager(void *arg) {
 #ifdef DEBUG
         printf("\t\t[id]: %" PRIu64 "\n", m.id);
         printf("\t\t[from]: %s\n", m.from);
-        printf("\t\t[text]: %s\n", m.text);
+        printf("\t\t[txt]: %s\n", m.txt);
         printf("\t\t[flags]: %" PRIu32 "\n", m.flags);
 #endif
 
@@ -229,10 +231,12 @@ int main(int argc, char **argv) {
     }
 
     inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *) &their_addr), s, sizeof s);
-    // XXX add var args to logs 
+
+    char users_handle[HANDLE_LEN + 1];
     struct message tmp;
     memset(&tmp, 0, sizeof tmp);
-    tryrecv(new_fd, &tmp, sizeof tmp); /* XXX add error checking */
+    tmp.txt = users_handle;
+    recvmessage(new_fd, &tmp);
     tmp.flags = FCONNECT;
     broadcastmsg(&tmp);
 

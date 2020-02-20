@@ -16,8 +16,13 @@
 #define PORT "33401"
 #define MAXDATASIZE 100
 
-int main(int argc, char **argv) {
+void sigterm_handler(int s) {
+  if (s == SIGTERM) {
+    endconnection();
+  }  
+}
 
+int main(int argc, char **argv) {
   int sockfd;
   struct addrinfo hints, *servinfo, *p;
   int rv;
@@ -60,17 +65,15 @@ int main(int argc, char **argv) {
   printf(GREEN "Connected to %s\n" ANSI_RESET, s);
   freeaddrinfo(servinfo); // all done with this structure 
 
+  /* So that ctrl-c doesn't break everything */
+  signal(SIGTERM, sigterm_handler);
+
   struct handlerinfo info;
 
   /* Tell the server who we are */
-  char handle[MAX_NAME_LEN + 1];
+  char handle[HANDLE_LEN + 1];
   printf("handle:");
   scanf("%s", handle);
-
-  struct message msg;
-  memset(&msg, 0, sizeof msg);
-  memcpy(msg.from, handle, sizeof handle);
-  trysend(sockfd, &msg, sizeof msg);
 
   info.sfd = sockfd;
   info.handle = handle;

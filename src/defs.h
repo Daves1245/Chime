@@ -10,7 +10,7 @@
 #define MAX_PACKET_PAYLOAD_SIZE 1400
 #define MAX_PACKETS_PER_MSG 256 // handle input up to 358400 bytes long
 
-#define MAX_NAME_LEN 30
+#define HANDLE_LEN 30
 #define MAX_TEXT_LEN 3000
 
 #define HASH_LEN 256 // length of hash
