@@ -66,11 +66,15 @@ int trysend(int fd, void *buff, size_t bufflen) {
 }
 
 int numdigs(uint64_t num) {
+  if (num == 0) {
+    return 1;
+  }
   int ret = 0;
   while (num > 0) {
     ret++;
     num /= 10;
   }
+  printf("numdigs returning %d\n", ret);
   return ret;
 }
 
@@ -212,7 +216,7 @@ void *thread_send(void *handlei) {
 
 void displaybuff(char *buff, int n) {
   for (int i = 0; i < n; i++) {
-    if (buff[i] == '\0') {
+    if (buff[i] == '\n') {
       putchar('_');
     } else {
       putchar(buff[i]);
@@ -220,24 +224,88 @@ void displaybuff(char *buff, int n) {
   }
 }
 
+FILE *rfp = NULL;
+FILE *wfp = NULL;
+
 int recvmessage(int sfd, struct message *msg) {
-  char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 4];
-  size_t recvd = recv(sfd, buff, sizeof buff, 0);
+  char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 4] = { 0 };
+  size_t bread;
+  char *tmp = NULL;
+
+  bread = recv(sfd, buff, sizeof buff, 0);
+
+#ifdef DEBUGRECV
+  printf("[RECV RAW]: %s\n", buff);
+#endif
+  tmp = strtok(buff, "\n");
+  while (!tmp) {
+    bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
+    tmp = strtok(NULL, "\n");
+  }
+  msg->id = atoll(tmp);
+#ifdef DEBUGRECV 
+  printf("[RECV]: id %" PRIu64 "\n", msg->id);
+#endif
+  tmp = strtok(NULL, "\n");
+  while (!tmp) {
+    bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);
+    tmp = strtok(NULL, "\n");
+  }
+  msg->uid = atoll(tmp);
+#ifdef DEBUGRECV
+  printf("[RECV]: uid %" PRIu32 "\n", msg->uid);
+#endif
+  tmp = strtok(NULL, "\n");
+  while (!tmp) {
+    bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);
+    tmp = strtok(NULL, "\n");
+  }
+  strcpy(msg->from, tmp);
+#ifdef DEBUGRECV
+  printf("[RECV]: from %s\n", msg->from);
+#endif
+  tmp = strtok(NULL, "\n");
+  while (!tmp) {
+    bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);
+    tmp = strtok(NULL, "\n");
+  }
+  strcpy(msg->txt, tmp);
+  msg->txtlen = strlen(msg->txt);
+#ifdef DEBUGRECV
+  printf("[RECV]: txt %s\n", msg->txt);
+#endif
+  tmp = strtok(NULL, "\n");
+  while (!tmp) {
+    bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);
+    tmp = strtok(NULL, "\n");
+  }
+  msg->flags = atoll(tmp);
+#ifdef DEBUGRECV
+  printf("[RECV]: %" PRIu32 "\n", msg->flags);
+#endif
+
+  //size_t recvd = recv(sfd, buff, sizeof buff, 0);
+
+  /*
+  printf("-------DISPLAYBUFF------\n");
+  displaybuff(buff, sizeof buff);
+  printf("-------DISPLAYBUFF-------\n");
+  */
 
 #ifdef DEBUG
   printf("bytes received: %lu\n", recvd);
 #endif
 
-  if (recvd < 0) {
+  /*if (recvd < 0) {
     perror("recv");
     return -1;
   } else if (recvd == 0) {
     fprintf(stderr, "Connection has closed, cannot receive message");
     return -2;
-  }
-  register int i = 0;
+  }*/
+  //register int i = 0;
   /* XXX check i stays within sizeof buff always */
-  msg->id = atoll(buff);
+  /*msg->id = atoll(buff);
   while (buff[i++] != '\0') {
     while (i > recvd) {
       recvd += recv(sfd, buff + i, sizeof(buff) - i, 0);
@@ -262,29 +330,48 @@ int recvmessage(int sfd, struct message *msg) {
       recvd += recv(sfd, buff + i, sizeof(buff) - i, 0);
     }
   }
-  msg->flags = atoll(buff + i);
+  msg->flags = atoll(buff + i);*/
+  
   return 0;
 }
 
 /* Unpack struct, send each field as char stream */
 int sendmessage(int fd, const struct message *msg) {
+  if (!wfp) {
+    wfp = fdopen(dup(fd), "w");
+  }
   /* One buffer large enough to store each field - and their respective null byte */
-  char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + HANDLE_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 4];
+  char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + HANDLE_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 5];
   memset(buff, 0, sizeof buff);
-
-  /* Store info in buffer, send it off in one go */
-  sprintf(buff, "%" PRIu64, msg->id);
-  sprintf(buff + numdigs(msg->id) + 1, "%" PRIu32, msg->uid);
-  sprintf(buff + numdigs(msg->id) + numdigs(msg->uid) + 2, "%s", msg->from);
-  sprintf(buff + numdigs(msg->id) + numdigs(msg->uid) + strlen(msg->from) + 3, "%s", msg->txt);
-  sprintf(buff + numdigs(msg->id) + numdigs(msg->uid) + + strlen(msg->from) + msg->txtlen + 4, "%" PRIu32, msg->flags);
-  displaymessage(msg);
-  size_t to_send = numdigs(msg->id) + numdigs(msg->uid) + strlen(msg->from) + msg->txtlen + numdigs(msg->flags) + 5;
-  size_t sent = send(fd, buff, numdigs(msg->id) + numdigs(msg->uid) + strlen(msg->from) + msg->txtlen + numdigs(msg->flags) + 5, 0);
-#ifdef DEBUG
-  printf("bytes to be sent: %ld\n", to_send);
-  printf("bytes sent: %ld\n", sent);
-  displaybuff((char *) msg, to_send);
+  sprintf(buff, "%" PRIu64 "\n%" PRIu32 "\n%s\n%s\n%" PRIu32 "\n%c", msg->id, msg->uid, msg->from, msg->txt, msg->flags, '\0');
+  size_t sent = 0, tosend = strlen(buff);
+#ifdef DEBUGSEND
+  printf("message to be sent: %s\n", buff);
 #endif
+  while ((sent = send(fd, buff, tosend - sent, 0)) != tosend) {
+    if (sent < 0) {
+      perror("send");
+      exit(EXIT_FAILURE);
+    } else if (sent == 0) {
+      fprintf(stderr, "Connection has closed. Cannot sent message. Exiting now...\n");
+      exit(EXIT_FAILURE);
+    }
+#ifdef DEBUG
+    printf("not all of message sent. Sending the rest...\n");
+#endif
+  }
+  //memset(buff, 0, sizeof buff);
+  
+  /* Store info in buffer, send it off in one go */
+  //sprintf(buff, "%" PRIu64 "%c%" PRIu32 "%c%s%c%s%c%" PRIu32 "%c", msg->id, '\0', msg->uid, '\0', msg->from, '\0', msg->txt, '\0', msg->flags, '\0');
+  //sprintf(buff + numdigs(msg->id) + 1, "%" PRIu32, msg->uid);
+  //sprintf(buff + numdigs(msg->id) + numdigs(msg->uid) + 2, "%s", msg->from);
+  //sprintf(buff + numdigs(msg->id) + numdigs(msg->uid) + strlen(msg->from) + 3, "%s", msg->txt);
+  //sprintf(buff + numdigs(msg->id) + numdigs(msg->uid) + + strlen(msg->from) + msg->txtlen + 4, "%" PRIu32, msg->flags);
+  //size_t to_send = numdigs(msg->id) + numdigs(msg->uid) + strlen(msg->from) + msg->txtlen + numdigs(msg->flags) + 5;
+  //size_t sent = send(fd, buff, to_send, 0);
+  //printf("-------SEND MESSAGE %d--------\n", to_send);
+  //displaybuff(buff, to_send);
+  //printf("--------SEND MESSAGE --------\n");
   return 0;
 }

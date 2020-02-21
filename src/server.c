@@ -74,12 +74,14 @@ void *manager_tmp(void *arg) {
   while (1) {
     poll(listener, numconns, 1);
     for (int i = 0; i < numconns; i++) {
-      char buff[sizeof(struct message) + 1];
       if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
+#ifdef DEBUGMANAGER
+        char buff[sizeof(struct message) + 1];
         printf("Reading from fd %d\n", listener[i].fd);  
         printf("Bytes read: %ld\n", recv(listener[i].fd, buff, sizeof(struct message) + 1, 0));
         buff[sizeof(struct message)] = '\0';
         printf("Contents of fd %d: %s\n", listener[i].fd, buff);
+#endif
       }
     }
   }
@@ -92,9 +94,6 @@ void *manager(void *arg) {
   while (1) {
     poll(listener, numconns, 1);
     for (int i = 0; i < numconns; i++) {
-#ifdef DEBUG
-      printf("NUMBER OF CONNECTIONS: %d\n", numconns);
-#endif
       char logbuff[100 + MAX_TEXT_LEN]; // XXX make logs var args. tmp hack fix
       if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
         /*char header[HEADER_LEN];
@@ -104,7 +103,6 @@ void *manager(void *arg) {
           }
           if (strcmp(header, "MSG:") == 0) { */
         recvmessage(listener[i].fd, &m);
-        printf("contents of m.txt: %s\n", m.txt);
         if (strcmp(m.txt, "/exit") == 0) {
           sprintf(logbuff, "Disconnecting client on socket fd: %d", listener[i].fd); // XXX var args logs
           close(listener[i].fd);
@@ -119,7 +117,8 @@ void *manager(void *arg) {
         sprintf(logbuff, YELLOW "received msg from %s", m.from);
         logs(logbuff);
 
-#ifdef DEBUG
+#ifdef DEBUGMANAGER
+        displaybuff((char *) &m, 100);
         printf("\t\t[id]: %" PRIu64 "\n", m.id);
         printf("\t\t[from]: %s\n", m.from);
         printf("\t\t[txt]: %s\n", m.txt);

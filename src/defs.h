@@ -2,6 +2,8 @@
 // debug flags
 // #define DEBUG_RECVMSG 1 
 
+//#define DEBUGRECV 1
+
 // Arbitrary
 #define HEADER_LEN 4
 #define MAX_RECV_LEN 100
@@ -11,7 +13,7 @@
 #define MAX_PACKETS_PER_MSG 256 // handle input up to 358400 bytes long
 
 #define HANDLE_LEN 30
-#define MAX_TEXT_LEN 3000
+#define MAX_TEXT_LEN 100
 
 #define HASH_LEN 256 // length of hash
 
