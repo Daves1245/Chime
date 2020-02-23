@@ -1,3 +1,6 @@
+#ifndef COLORS_H
+#define COLORS_H
+
 /* ansi-colours.h */
 
 #pragma once
@@ -21,3 +24,5 @@
 #define ANSI_BLUE(text)           ("\x1b[34m" text ANSI_RESET)
 #define ANSI_MAGENTA(text)        ("\x1b[35m" text ANSI_RESET)
 #define ANSI_CYAN(text)           ("\x1b[36m" text ANSI_RESET)
+
+#endif

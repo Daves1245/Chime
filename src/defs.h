@@ -1,3 +1,6 @@
+#ifndef DEFS_H
+#define DEFS_H
+
 //#define DEBUG 1
 // debug flags
 // #define DEBUG_RECVMSG 1 
@@ -24,3 +27,4 @@
 #define FCONNECT 0x1
 #define FDISCONNECT 0x2
 
+#endif

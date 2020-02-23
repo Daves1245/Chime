@@ -12,9 +12,15 @@
 #include <poll.h>
 
 #include "common.h"
+#include "message.h"
+#include "colors.h"
+#include "defs.h"
+#include "threading.h"
 
 #define PORT "33401"
 #define MAXDATASIZE 100
+
+void getinput(char *dest, size_t *res, size_t len); /* store '\n'-terminated line at most len into dest and modify *res accordingly */
 
 void sigterm_handler(int s) {
   if (s == SIGTERM) {
@@ -99,4 +105,17 @@ int main(int argc, char **argv) {
 
   close(sockfd);
   return 0;
+}
+
+void getinput(char *dest, size_t *res, size_t len) {
+  int c;
+  for (int i = 0; i < len; i++) {
+    c = getchar();
+    if (c == '\n' || c == EOF) {
+      *res = i + 1;
+      break;
+    }
+    dest[i] = c;
+  }
+  dest[*res - 1] = '\0';
 }

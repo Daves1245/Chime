@@ -13,12 +13,14 @@
 #include <pthread.h>
 #include <poll.h>
 
+#include "colors.h"
 #include "common.h"
+#include "message.h"
+#include "defs.h"
 
 #define PORT "33401"
 #define BACKLOG 10
 
-void sigchld_handler(int);                      /* Error handling */
 void broadcastmsg(struct message *m);               /* Broadcast msg to all users */
 void broadcast(const char *msg, size_t msglen); /* To be deprecated */
 void *manager(void *arg);                       /* Manager thread for connections */
@@ -32,13 +34,6 @@ void logs(const char *str) {
   time(&rtime);
   now = localtime(&rtime);
   printf(CYAN "[%d:%d]: " ANSI_RESET "%s\n", now->tm_hour, now->tm_min, str);
-}
-
-void sigchld_handler(int s) {
-  // waitpid() might overwrite errno, so we save and restore it
-  int saved_errno = errno;
-  while (waitpid(-1, NULL, WNOHANG) > 0);
-  errno = saved_errno;
 }
 
 /* Broadcast a message to all users */
@@ -66,23 +61,6 @@ void broadcastmsg(struct message *m) {
   for (int i = 0; i < numconns; i++) {
     if (listener[i].fd > 0) {
       sendmessage(listener[i].fd, m);
-    }
-  }
-}
-
-void *manager_tmp(void *arg) {
-  while (1) {
-    poll(listener, numconns, 1);
-    for (int i = 0; i < numconns; i++) {
-      if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
-#ifdef DEBUGMANAGER
-        char buff[sizeof(struct message) + 1];
-        printf("Reading from fd %d\n", listener[i].fd);  
-        printf("Bytes read: %ld\n", recv(listener[i].fd, buff, sizeof(struct message) + 1, 0));
-        buff[sizeof(struct message)] = '\0';
-        printf("Contents of fd %d: %s\n", listener[i].fd, buff);
-#endif
-      }
     }
   }
 }
@@ -146,7 +124,6 @@ int main(int argc, char **argv) {
   struct addrinfo hints, *servinfo, *p;
   struct sockaddr_storage their_addr; // connect's address
   socklen_t sin_size;
-  struct sigaction sa;
   int yes = 1;
   char s[INET6_ADDRSTRLEN];
   int rv;
@@ -200,14 +177,6 @@ int main(int argc, char **argv) {
 
   if (listen(sockfd, BACKLOG) == -1) {
     perror("listen");
-    exit(1);
-  }
-
-  sa.sa_handler = sigchld_handler; // reap all dead procedures
-  sigemptyset(&sa.sa_mask);
-  sa.sa_flags = SA_RESTART;
-  if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-    perror("sigaction");
     exit(1);
   }
 
