@@ -66,9 +66,8 @@ void broadcastmsg(struct message *m) {
 }
 
 void *manager(void *arg) {
-  char buff[MAX_RECV_LEN];
+  char buff[MAX_RECV_LEN + 1];
   struct message m;
-  m.txt = malloc(MAX_TEXT_LEN);
   while (1) {
     poll(listener, numconns, 1);
     for (int i = 0; i < numconns; i++) {
@@ -111,8 +110,8 @@ void *manager(void *arg) {
           break;
           }*/
         //broadcast(buff, numbytes);
-        memset(buff, '\0', MAX_RECV_LEN);
         //}
+        memset(buff, 0, sizeof buff);
       }
     } // end msg searching loop 
   }
@@ -203,7 +202,7 @@ int main(int argc, char **argv) {
     char users_handle[HANDLE_LEN + 1];
     struct message tmp;
     memset(&tmp, 0, sizeof tmp);
-    tmp.txt = users_handle;
+    strcpy(tmp.txt, users_handle);
     recvmessage(new_fd, &tmp);
     tmp.flags = FCONNECT;
     broadcastmsg(&tmp);

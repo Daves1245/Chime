@@ -33,6 +33,8 @@ int main(int argc, char **argv) {
   struct addrinfo hints, *servinfo, *p;
   int rv;
   char s[INET6_ADDRSTRLEN];
+  struct user usr;
+  struct handlerinfo info;
 
   if (argc != 2) {
     fprintf(stderr, RED "usage: client [HOSTNAME]\n" ANSI_RESET);
@@ -74,15 +76,13 @@ int main(int argc, char **argv) {
   /* So that ctrl-c doesn't break everything */
   signal(SIGTERM, sigterm_handler);
 
-  struct handlerinfo info;
-
   /* Tell the server who we are */
-  char handle[HANDLE_LEN + 1];
   printf("handle:");
-  scanf("%s", handle);
+  scanf("%s", usr.handle);
 
   info.sfd = sockfd;
-  info.handle = handle;
+  info.handle = usr.handle;
+  info.usr = &usr;
 
   pthread_t sendertid;
   pthread_t receivertid;

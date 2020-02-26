@@ -18,6 +18,7 @@
 struct handlerinfo {
   int sfd;
   char *handle;
+  struct user *usr;
 };
 
 void endconnection();                               /* Terminate the connection */
@@ -54,11 +55,7 @@ void sighandler(int s) {
 void *thread_recv(void *handlei) {
   struct handlerinfo *info = handlei;
   struct message msg;
-  msg.txt = malloc(MAX_TEXT_LEN); /* XXX _guarantee_ this is freed */
-
-  strcpy(msg.from, info->handle);
-  msg.flags = FCONNECT;
-  sendmessage(info->sfd, &msg);
+  memset(&msg, 0, sizeof msg);
 
   while (1) {
     recvmessage(info->sfd, &msg);
@@ -70,11 +67,11 @@ void *thread_recv(void *handlei) {
 		    printf(YELLOW "[%s entered the chat]" ANSI_RESET "\n", msg.from);
 		    break;
 	    case FMSG:
-        displaymessage(&msg);
+        showmessage(&msg);
 		    break;
       default:
         printf(RED "[invalid flags, defaulting to displaymsg]" ANSI_RESET "\n");
-        displaymessage(&msg);
+        showmessage(&msg);
         break;
     }
   }
@@ -83,14 +80,9 @@ void *thread_recv(void *handlei) {
 void *thread_send(void *handlei) {
 	struct handlerinfo *info = handlei;
 	struct message msg;
-	size_t msgtxtlen;
 
 	memset(&msg, 0, sizeof msg);
-	memcpy(msg.from, info->handle, strlen(info->handle));
-  msg.id = 0;
-  msg.uid = 1;
-  msg.txt = malloc(MAX_TEXT_LEN);
-  msg.flags = FMSG;
+  makemessage(info->usr, &msg);
 
 	struct pollfd listener;
 	listener.fd = 0; // poll for stdin
@@ -100,15 +92,9 @@ void *thread_send(void *handlei) {
 		poll(&listener, 1, -1); // block until we can read
 		if (listener.revents == POLLIN) {
 			/* XXX Grab input, check for exit */
-			getinput(msg.txt, &msgtxtlen, MAX_TEXT_LEN);
-			if (msgtxtlen == 0) {
-				memcpy(msg.txt, "/exit", 5);
-			}
+      packmessage(&msg);
 			msg.id++;
 			sendmessage(info->sfd, &msg);
-			if (strcmp(msg.txt, "/exit") == 0) {
-				exit(EXIT_SUCCESS);
-			}
 		}
 	}
 }

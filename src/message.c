@@ -7,6 +7,7 @@
 #include "defs.h"
 #include "message.h"
 #include "colors.h"
+#include "user.h"
 
 /***********
  * XXX
@@ -17,17 +18,35 @@
  * - more user commands
  ***********/
 
-void displaymessage(const struct message *msg) {
+void showmessage(const struct message *msg) {
   printf(CYAN "[%s]" ANSI_RESET ":%s\n", msg->from, msg->txt);
+}
+
+static void cmdparse(struct message *msg) {
+  if (strcmp(msg->txt + 1, "exit") == 0) {
+    msg->flags = FDISCONNECT;
+  }
+}
+
+int packmessage(struct message *msg) {
+  fgets(msg->txt, MAX_TEXT_LEN + 1, stdin);
+  if (msg->txt[0] == '/') {
+    cmdparse(msg);
+  }
+  return 0;
+}
+
+int makemessage(const struct user *usr, struct message *msg) {
+  msg->uid = usr->uid;
+  strcpy(msg->from, usr->handle);
+  return 0;
 }
 
 int recvmessage(int sfd, struct message *msg) {
   char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 4] = { 0 };
   size_t bread;
   char *tmp = NULL;
-
   bread = recv(sfd, buff, sizeof buff, 0);
-
 #ifdef DEBUGRECV
   printf("[RECV RAW]: %s\n", buff);
 #endif
@@ -64,7 +83,6 @@ int recvmessage(int sfd, struct message *msg) {
     tmp = strtok(NULL, "\n");
   }
   strcpy(msg->txt, tmp);
-  msg->txtlen = strlen(msg->txt);
 #ifdef DEBUGRECV
   printf("[RECV]: txt %s\n", msg->txt);
 #endif
@@ -105,3 +123,4 @@ int sendmessage(int fd, const struct message *msg) {
   }
   return 0;
 }
+
