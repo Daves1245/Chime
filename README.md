@@ -13,14 +13,18 @@ make
 ```
 run the server binary
 ```bash
-bin/./server
+bin/server
 ```
 on a separate machine (or terminal), run the client executable and pass the ip of the server
 ```bash
-bin/./client 127.0.0.1
+bin/client 127.0.0.1
 ```
 Start chatting away!
 (use /exit to leave the chat)
 
+Feel free to try it on my ubuntu instance in the cloud.
+```
+bin/client 3.19.255.92
+```
 # Demo
 ![Chime demo](demo/Chime_presentation.gif)
