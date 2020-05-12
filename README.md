@@ -24,7 +24,7 @@ Start chatting away!
 
 Feel free to try it on my ubuntu instance in the cloud.
 ```
-bin/client 3.19.255.92
+bin/client 3.15.189.248
 ```
 # Demo
 ![Chime demo](demo/demo.gif)

@@ -1,10 +1,6 @@
 #ifndef DEFS_H
 #define DEFS_H
 
-//#define DEBUG 1
-// debug flags
-// #define DEBUG_RECVMSG 1 
-
 //#define DEBUGRECV 1
 
 // Arbitrary
