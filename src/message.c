@@ -47,55 +47,36 @@ int recvmessage(int sfd, struct message *msg) {
   size_t bread;
   char *tmp = NULL;
   bread = recv(sfd, buff, sizeof buff, 0);
-#ifdef DEBUGRECV
-  printf("[RECV RAW]: %s\n", buff);
-#endif
   tmp = strtok(buff, "\n");
   while (!tmp) {
     bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
     tmp = strtok(NULL, "\n");
   }
   msg->id = atoll(tmp);
-#ifdef DEBUGRECV 
-  printf("[RECV]: id %" PRIu64 "\n", msg->id);
-#endif
   tmp = strtok(NULL, "\n");
   while (!tmp) {
     bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);
     tmp = strtok(NULL, "\n");
   }
   msg->uid = atoll(tmp);
-#ifdef DEBUGRECV
-  printf("[RECV]: uid %" PRIu32 "\n", msg->uid);
-#endif
   tmp = strtok(NULL, "\n");
   while (!tmp) {
     bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);
     tmp = strtok(NULL, "\n");
   }
   strcpy(msg->from, tmp);
-#ifdef DEBUGRECV
-  printf("[RECV]: from %s\n", msg->from);
-#endif
   tmp = strtok(NULL, "\n");
   while (!tmp) {
     bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);
     tmp = strtok(NULL, "\n");
   }
   strcpy(msg->txt, tmp);
-#ifdef DEBUGRECV
-  printf("[RECV]: txt %s\n", msg->txt);
-#endif
   tmp = strtok(NULL, "\n");
   while (!tmp) {
     bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);
     tmp = strtok(NULL, "\n");
   }
   msg->flags = atoll(tmp);
-#ifdef DEBUGRECV
-  printf("[RECV]: %" PRIu32 "\n", msg->flags);
-  printf("bytes received: %lu\n", recvd);
-#endif
   return 0;
 }
 
