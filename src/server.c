@@ -199,6 +199,10 @@ int main(int argc, char **argv) {
 
     inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *) &their_addr), s, sizeof s);
 
+    listener[numconns].fd = new_fd;
+    listener[numconns].events = POLLIN;
+    numconns++;
+
     char users_handle[HANDLE_LEN + 1];
     struct message tmp;
     memset(&tmp, 0, sizeof tmp);
@@ -211,9 +215,6 @@ int main(int argc, char **argv) {
     sprintf(buff, "%s connected from %s", tmp.from, s);
     logs(buff);
 
-    listener[numconns].fd = new_fd;
-    listener[numconns].events = POLLIN;
-    numconns++;
   }
   return 0;
 }
