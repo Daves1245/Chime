@@ -80,7 +80,6 @@ void *manager(void *arg) {
           }
           if (strcmp(header, "MSG:") == 0) { */
         recvmessage(listener[i].fd, &m);
-        printf("received message from sd %d\n", listener[i].fd);
         if (strcmp(m.txt, "/exit") == 0) {
           sprintf(logbuff, "Disconnecting client on socket fd: %d", listener[i].fd); // XXX var args logs
           close(listener[i].fd);
@@ -105,16 +104,9 @@ void *manager(void *arg) {
 
         broadcastmsg(&m);
 
-        /*size_t numbytes;
-          if ((numbytes = recv(listener[i].fd, buff, MAX_RECV_LEN, 0)) == -1) {
-          perror("recv");
-          break;
-          }*/
-        //broadcast(buff, numbytes);
-        //}
         memset(buff, 0, sizeof buff);
       }
-    } // end msg searching loop 
+    }
   }
   return NULL;
 }
@@ -127,6 +119,11 @@ int main(int argc, char **argv) {
   int yes = 1;
   char s[INET6_ADDRSTRLEN];
   int rv;
+  char *port = PORT;
+
+  if (argc >= 2) {
+      port = argv[2];
+  }
 
   char logbuff[100];
   sprintf(logbuff, "Creating server on port %s", PORT); // XXX logs var args
@@ -137,85 +134,67 @@ int main(int argc, char **argv) {
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
 
-  if (argc >= 2) { // if port argument specifieds
-    if ((rv = getaddrinfo(NULL, argv[2], &hints, &servinfo)) != 0) {
+  if ((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
       fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
       return 1;
-    } 
-  } else if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
-    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-    return 1;
-  }
+  } 
 
   // loop through all the results and bind to the first we can
   for (p = servinfo; p != NULL; p = p->ai_next) {
-    if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-      perror("server: socket");
-      continue;
-    }
+      if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+          perror("server: socket");
+          continue;
+      }
 
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-      perror("setsockopt");
-      exit(1);
-    }
+      if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+          perror("setsockopt");
+          exit(1);
+      }
 
-    if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-      close(sockfd);
-      perror("server: bind");
-      continue;
-    }
-    break;
+      if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+          close(sockfd);
+          perror("server: bind");
+          continue;
+      }
+      break;
   }
 
   logs(GREEN "Server setup " ANSI_RESET);
   freeaddrinfo(servinfo); // all done with this structure
 
   if (p == NULL) {
-    fprintf(stderr, "server: failed to bind\n");
-    exit(1);
+      fprintf(stderr, "server: failed to bind\n");
+      exit(1);
   }
 
   if (listen(sockfd, BACKLOG) == -1) {
-    perror("listen");
-    exit(1);
+      perror("listen");
+      exit(1);
   }
 
   pthread_t managert;
   if (pthread_create(&managert, NULL, manager, NULL)) {
-    perror("pthread_create");
-    exit(EXIT_FAILURE);
+      perror("pthread_create");
+      exit(EXIT_FAILURE);
   }
 
   // puts(GREEN "Manager thread created" ANSI_RESET);
   logs(GREEN "Manager thread created" ANSI_RESET);
   logs("Waiting for connections...");
   while (1) { // main accept() loop
-    sin_size = sizeof their_addr;
-    new_fd = accept(sockfd, (struct sockaddr *) &their_addr, &sin_size);
+      sin_size = sizeof their_addr;
+      new_fd = accept(sockfd, (struct sockaddr *) &their_addr, &sin_size);
 
-    if (new_fd == -1) {
-      perror("accept");
-      continue;
-    }
+      if (new_fd == -1) {
+          perror("accept");
+          continue;
+      }
 
-    inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *) &their_addr), s, sizeof s);
+      inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *) &their_addr), s, sizeof s);
 
-    listener[numconns].fd = new_fd;
-    listener[numconns].events = POLLIN;
-    numconns++;
-
-    char users_handle[HANDLE_LEN + 1];
-    struct message tmp;
-    memset(&tmp, 0, sizeof tmp);
-    strcpy(tmp.txt, users_handle);
-    recvmessage(new_fd, &tmp);
-    tmp.flags = FCONNECT;
-    broadcastmsg(&tmp);
-
-    char buff[100]; // arbitrary tmp hack fix 
-    sprintf(buff, "%s connected from %s", tmp.from, s);
-    logs(buff);
-
+      listener[numconns].fd = new_fd;
+      listener[numconns].events = POLLIN;
+      numconns++;
   }
   return 0;
 }
