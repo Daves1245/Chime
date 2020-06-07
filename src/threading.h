@@ -91,8 +91,7 @@ void *thread_send(void *handlei) {
     listener.events = POLLIN; // wait till we have input
 
     while (1) {
-        poll(&listener, 1, -1); // block until we can read
-        if (listener.revents == POLLIN) {
+        if (poll(&listener, 1, -1) && listener.revents == POLLIN) {
             /* XXX Grab input, check for exit */
             packmessage(&msg);
             msg.id++;
