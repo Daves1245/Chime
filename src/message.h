@@ -6,9 +6,11 @@
 
 #include "user.h"
 
+#define TS_LEN 20
+
 struct message {
   uint64_t id;      /* Unique message id */
-  struct tm ts;     /* Message timestamp */
+  char timestmp[TS_LEN];
   uint32_t uid;  /* ID of user that message belongs to */
   char from[HANDLE_LEN + 1];
   char txt[MAX_TEXT_LEN + 1]; /* Text message being sent */

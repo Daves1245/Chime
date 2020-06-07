@@ -81,8 +81,10 @@ void *thread_send(void *handlei) {
     struct handlerinfo *info = handlei;
     struct message msg;
 
+    // pack msg with user info and send to server
     memset(&msg, 0, sizeof msg);
     makemessage(info->usr, &msg);
+    sendmessage(info->sfd, &msg);
 
     struct pollfd listener;
     listener.fd = 0; // poll for stdin

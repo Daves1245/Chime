@@ -33,6 +33,11 @@ int packmessage(struct message *msg) {
   if (msg->txt[0] == '/') {
     cmdparse(msg);
   }
+  time_t rtime;
+  struct tm *now;
+  time(&rtime);
+  now = localtime(&rtime);
+  sprintf(msg->timestmp, "[%d:%2d]", now->tm_hour, now->tm_min);
   return 0;
 }
 
