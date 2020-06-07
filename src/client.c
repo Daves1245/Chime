@@ -17,6 +17,7 @@
 #include "defs.h"
 #include "threading.h"
 
+#define LOCALHOST "127.0.0.1"
 #define PORT "33401"
 #define MAXDATASIZE 100
 
@@ -35,17 +36,17 @@ int main(int argc, char **argv) {
   char s[INET6_ADDRSTRLEN];
   struct user usr;
   struct handlerinfo info;
+  char *hostname = LOCALHOST;
 
-  if (argc != 2) {
-    fprintf(stderr, RED "usage: client [HOSTNAME]\n" ANSI_RESET);
-    exit(1);
+  if (argc > 1) {
+      hostname = argv[1];
   }
 
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_STREAM;
 
-  if ((rv = getaddrinfo(argv[1], PORT, &hints, &servinfo)) != 0) {
+  if ((rv = getaddrinfo(hostname, PORT, &hints, &servinfo)) != 0) {
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
     return 1;
   }

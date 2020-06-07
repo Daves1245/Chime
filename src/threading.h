@@ -16,9 +16,9 @@
  ***********/
 
 struct handlerinfo {
-  int sfd;
-  char *handle;
-  struct user *usr;
+    int sfd;
+    char *handle;
+    struct user *usr;
 };
 
 void endconnection();                               /* Terminate the connection */
@@ -32,13 +32,13 @@ void *connection_handler(void *);                   /* Connection handling threa
  * - check for recognition of logging off
  */
 void endconnection(void) {
-  struct message tmp;
-  memset(&tmp, 0, sizeof tmp);
-  tmp.flags = FDISCONNECT;
-  sendmessage(sfd, &tmp);
-  close(sfd);
-  printf("Disconnected\n");
-  exit(EXIT_SUCCESS);
+    struct message tmp;
+    memset(&tmp, 0, sizeof tmp);
+    tmp.flags = FDISCONNECT;
+    sendmessage(sfd, &tmp);
+    close(sfd);
+    printf("Disconnected\n");
+    exit(EXIT_SUCCESS);
 }
 
 /*
@@ -47,54 +47,54 @@ void endconnection(void) {
  */
 // XXX
 void sighandler(int s) {
-  if (s == SIGTERM) {
-    endconnection();
-  }
+    if (s == SIGTERM) {
+        endconnection();
+    }
 }
 
 void *thread_recv(void *handlei) {
-  struct handlerinfo *info = handlei;
-  struct message msg;
-  memset(&msg, 0, sizeof msg);
+    struct handlerinfo *info = handlei;
+    struct message msg;
+    memset(&msg, 0, sizeof msg);
 
-  while (1) {
-    recvmessage(info->sfd, &msg);
-    switch (msg.flags) {
-	    case FDISCONNECT:
-		    printf(YELLOW "[%s left the chat]" ANSI_RESET "\n", msg.from);
-		    break;
-	    case FCONNECT:
-		    printf(YELLOW "[%s entered the chat]" ANSI_RESET "\n", msg.from);
-		    break;
-	    case FMSG:
-        showmessage(&msg);
-		    break;
-      default:
-        printf(RED "[invalid flags, defaulting to displaymsg]" ANSI_RESET "\n");
-        showmessage(&msg);
-        break;
+    while (1) {
+        recvmessage(info->sfd, &msg);
+        switch (msg.flags) {
+            case FDISCONNECT:
+                printf(YELLOW "[%s left the chat]" ANSI_RESET "\n", msg.from);
+                break;
+            case FCONNECT:
+                printf(YELLOW "[%s entered the chat]" ANSI_RESET "\n", msg.from);
+                break;
+            case FMSG:
+                showmessage(&msg);
+                break;
+            default:
+                printf(RED "[invalid flags, defaulting to displaymsg]" ANSI_RESET "\n");
+                showmessage(&msg);
+                break;
+        }
     }
-  }
 }
 
 void *thread_send(void *handlei) {
-	struct handlerinfo *info = handlei;
-	struct message msg;
+    struct handlerinfo *info = handlei;
+    struct message msg;
 
-	memset(&msg, 0, sizeof msg);
-  makemessage(info->usr, &msg);
+    memset(&msg, 0, sizeof msg);
+    makemessage(info->usr, &msg);
 
-	struct pollfd listener;
-	listener.fd = 0; // poll for stdin
-	listener.events = POLLIN; // wait till we have input
+    struct pollfd listener;
+    listener.fd = 0; // poll for stdin
+    listener.events = POLLIN; // wait till we have input
 
-	while (1) {
-		poll(&listener, 1, -1); // block until we can read
-		if (listener.revents == POLLIN) {
-			/* XXX Grab input, check for exit */
-      packmessage(&msg);
-			msg.id++;
-			sendmessage(info->sfd, &msg);
-		}
-	}
+    while (1) {
+        poll(&listener, 1, -1); // block until we can read
+        if (listener.revents == POLLIN) {
+            /* XXX Grab input, check for exit */
+            packmessage(&msg);
+            msg.id++;
+            sendmessage(info->sfd, &msg);
+        }
+    }
 }

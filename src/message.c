@@ -87,9 +87,6 @@ int sendmessage(int fd, const struct message *msg) {
   memset(buff, 0, sizeof buff);
   sprintf(buff, "%" PRIu64 "\n%" PRIu32 "\n%s\n%s\n%" PRIu32 "\n%c", msg->id, msg->uid, msg->from, msg->txt, msg->flags, '\0');
   size_t sent = 0, tosend = strlen(buff);
-#ifdef DEBUGSEND
-  printf("message to be sent: %s\n", buff);
-#endif
   while ((sent = send(fd, buff, tosend - sent, 0)) != tosend) {
     if (sent < 0) {
       perror("send");
@@ -98,9 +95,6 @@ int sendmessage(int fd, const struct message *msg) {
       fprintf(stderr, "Connection has closed. Cannot sent message. Exiting now...\n");
       exit(EXIT_FAILURE);
     }
-#ifdef DEBUG
-    printf("not all of message sent. Sending the rest...\n");
-#endif
   }
   return 0;
 }
