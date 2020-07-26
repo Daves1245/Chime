@@ -1,15 +1,22 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <errno.h>
 #include <string.h>
-#include <netdb.h>
 #include <sys/types.h>
+
+#ifdef __unix__
+#include <unistd.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <pthread.h>
 #include <poll.h>
+#include <pthread.h>
+
+#else
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
 
 #include "common.h"
 #include "message.h"
@@ -28,6 +35,10 @@ void sigterm_handler(int s) {
 }
 
 int main(int argc, char **argv) {
+#ifndef __unix__
+  WSADATA wsa;
+  SOCKET sock;
+#endif
   int sockfd;
   struct addrinfo hints, *servinfo, *p;
   int rv;
@@ -35,9 +46,18 @@ int main(int argc, char **argv) {
   struct user usr;
   struct handlerinfo info;
   char *hostname = LOCALHOST;
+  
+  /* Windows requires winsocket initialization */
+#ifndef __unix__
+  if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+    fprintf(stderr, "Could not initialize winsocket. Error: %d\n", WSAGetLastError());
+    return EAGAIN;
+  }
+  printf("Winsock initialized.\n");
+#endif
 
   if (argc > 1) {
-      hostname = argv[1];
+    hostname = argv[1];
   }
 
   memset(&hints, 0, sizeof hints);
@@ -52,10 +72,17 @@ int main(int argc, char **argv) {
   printf("Attempting to connect...\n");
   // loop through all the results and connect to the first we can
   for (p = servinfo; p != NULL; p = p->ai_next) {
+#ifdef __unix__
     if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
       perror("client: socket");
       continue;
     }
+#else
+    if ((sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == INVALID_SOCKET) {
+      fprintf(stderr, "could not create socket. Error: %d\n", WSAGetLastError());
+      return EAGAIN;
+    }
+#endif
     if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
       close(sockfd);
       perror("client: connect");
@@ -67,8 +94,8 @@ int main(int argc, char **argv) {
     fprintf(stderr, "client: failed to connect\n");
     return 2;
   }
-  inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr), s, sizeof s);
 
+  inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr), s, sizeof s);
   printf(GREEN "Connected to %s\n" ANSI_RESET, s);
   freeaddrinfo(servinfo); // all done with this structure 
 

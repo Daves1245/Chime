@@ -18,6 +18,22 @@ ifneq ($(CFG),release)
 endif
 endif
 
+# Target build
+ARCH=posix
+
+ifeq ($(ARCH), windows)
+	CC = x86_64-w64-mingw32-gcc
+	LIB_FLAGS = -lws2_32.lib
+endif
+
+ifneq ($(ARCH), posix)
+ifneq ($(ARCH), windows)
+	@echo "invalid architecture " $(ARCH) "."
+	@echo "Choices are 'posix', 'windows'."
+	@exit 1
+endif
+endif
+
 # Sources
 CLIENT_SOURCES=src/message.c src/client.c
 SERVER_SOURCES=src/message.c src/server.c

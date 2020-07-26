@@ -1,8 +1,13 @@
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifdef __unix__
+#include <sys/socket.h>
+#else
+#include <winsock2.h>
+#endif
 
 #include "defs.h"
 #include "message.h"

@@ -3,6 +3,10 @@
 #include <signal.h>
 #include <math.h>
 
+#ifndef __unix__
+#include <io.h>
+#endif
+
 #include "colors.h"
 #include "defs.h"
 
@@ -36,7 +40,11 @@ void endconnection(void) {
     memset(&tmp, 0, sizeof tmp);
     tmp.flags = FDISCONNECT;
     sendmessage(sfd, &tmp);
+#ifdef __unix__
     close(sfd);
+#else
+    _close(sfd);
+#endif
     printf("Disconnected\n");
     exit(EXIT_SUCCESS);
 }
@@ -53,7 +61,7 @@ void sighandler(int s) {
 }
 
 void *thread_recv(void *handlei) {
-    struct handlerinfo *info = handlei;
+    struct handlerinfo *info = (struct handlerinfo *) handlei;
     struct message msg;
     memset(&msg, 0, sizeof msg);
 
@@ -78,7 +86,7 @@ void *thread_recv(void *handlei) {
 }
 
 void *thread_send(void *handlei) {
-    struct handlerinfo *info = handlei;
+    struct handlerinfo *info = (struct handlerinfo *) handlei;
     struct message msg;
 
     // pack msg with user info and send to server
@@ -86,9 +94,15 @@ void *thread_send(void *handlei) {
     makemessage(info->usr, &msg);
     sendmessage(info->sfd, &msg);
 
+#ifdef __unix__
     struct pollfd listener;
-    listener.fd = 0; // poll for stdin
     listener.events = POLLIN; // wait till we have input
+#else
+    WSAPOLLFD listener; 
+    listener.events = POLLRDNORM;
+#endif
+
+    listener.fd = 0; // poll for stdin
 
     while (1) {
         if (poll(&listener, 1, -1) && listener.revents == POLLIN) {
