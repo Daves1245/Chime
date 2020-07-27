@@ -20,11 +20,7 @@ on a separate machine (or terminal), run the client executable and pass the ip o
 bin/client 127.0.0.1
 ```
 Start chatting away!
-(use /exit to leave the chat)
+(/exit to leave the chat)
 
-Feel free to try it on my ubuntu instance in the cloud.
-```
-bin/client 3.15.189.248
-```
 # Demo
 ![Chime demo](demo/demo.gif)
