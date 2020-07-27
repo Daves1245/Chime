@@ -47,38 +47,60 @@ int makemessage(const struct user *usr, struct message *msg) {
   return 0;
 }
 
+// XXX FIX THIS ASAP
 int recvmessage(int sfd, struct message *msg) {
   char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 4] = { 0 };
   size_t bread;
   char *tmp = NULL;
+  int len = 0;
   bread = recv(sfd, buff, sizeof buff, 0);
   tmp = strtok(buff, "\n");
   while (!tmp) {
-    bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
+    len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
+    if (len == 0) {
+        return ECONNCLSD;
+    }
+    bread += len;
     tmp = strtok(NULL, "\n");
   }
   msg->id = atoll(tmp);
   tmp = strtok(NULL, "\n");
   while (!tmp) {
-    bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);
+    len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
+    if (len == 0) {
+        return ECONNCLSD;
+    }
+    bread += len;
     tmp = strtok(NULL, "\n");
   }
   msg->uid = atoll(tmp);
   tmp = strtok(NULL, "\n");
   while (!tmp) {
-    bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);
+    len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
+    if (len == 0) {
+        return ECONNCLSD;
+    }
+    bread += len;
     tmp = strtok(NULL, "\n");
   }
   strcpy(msg->from, tmp);
   tmp = strtok(NULL, "\n");
   while (!tmp) {
-    bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);
+    len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
+    if (len == 0) {
+        return ECONNCLSD;
+    }
+    bread += len;
     tmp = strtok(NULL, "\n");
   }
   strcpy(msg->txt, tmp);
   tmp = strtok(NULL, "\n");
   while (!tmp) {
-    bread += recv(sfd, buff + bread, sizeof(buff) - bread, 0);
+    len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
+    if (len == 0) {
+        return ECONNCLSD;
+    }
+    bread += len;
     tmp = strtok(NULL, "\n");
   }
   msg->flags = atoll(tmp);

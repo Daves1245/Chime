@@ -19,8 +19,14 @@
 #define UINT64_BASE10_LEN 21 // XXX rename this atrocity
 #define UINT32_BASE10_LEN 12 // XXX number of base10 digits needed to store all values of 32 bit integer
 
+/* Wait for input in ms */
+#define POLL_TIMEOUT 10
+
 #define FMSG 0x0
 #define FCONNECT 0x1
 #define FDISCONNECT 0x2
+
+/* Errors */
+#define ECONNCLSD -1 
 
 #endif

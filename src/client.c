@@ -21,10 +21,9 @@
 #define PORT "33401"
 #define MAXDATASIZE 100
 
-void sigterm_handler(int s) {
-  if (s == SIGTERM) {
-    endconnection();
-  }  
+// TODO standard signal error handling
+void sa_handle(int signal, siginfo_t *info, void *ucontext) {
+    eflag = FDISCONNECT;
 }
 
 int main(int argc, char **argv) {
@@ -35,6 +34,8 @@ int main(int argc, char **argv) {
   struct user usr;
   struct handlerinfo info;
   char *hostname = LOCALHOST;
+  struct sigaction s_act, s_oldact;
+  int res;
 
   if (argc > 1) {
       hostname = argv[1];
@@ -72,8 +73,17 @@ int main(int argc, char **argv) {
   printf(GREEN "Connected to %s\n" ANSI_RESET, s);
   freeaddrinfo(servinfo); // all done with this structure 
 
-  /* So that ctrl-c doesn't break everything */
-  signal(SIGTERM, sigterm_handler);
+  /* Implement signal handling */
+  s_act.sa_sigaction = sa_handle;
+  s_act.sa_flags = SA_SIGINFO;
+  res = sigaction(SIGTERM, &s_act, &s_oldact);
+  if (res != 0) {
+      perror("sigaction:");
+  }
+  res = sigaction(SIGINT, &s_act, &s_oldact);
+  if (res != 0) {
+      perror("sigaction:");
+  }
 
   /* Tell the server who we are */
   printf("handle:");
@@ -98,10 +108,12 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  /* Join threads (end the connection) to main, and exit */
+  /* Join threads to main, end connection */
   pthread_join(sendertid, NULL);
   pthread_join(receivertid, NULL);
 
+  printf("joined with main\n");
+  disconnect();
   close(sockfd);
   return 0;
 }

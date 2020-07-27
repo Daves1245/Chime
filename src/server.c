@@ -51,7 +51,7 @@ void broadcast(const char *msg, size_t msglen) {
                 }
             }
         }
-    } // end of loop
+    }
 }
 
 void broadcastmsg(struct message *m) {
@@ -161,7 +161,6 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    // puts(GREEN "Manager thread created" ANSI_RESET);
     logs(GREEN "Manager thread created" ANSI_RESET);
     logs("Waiting for connections...");
 
