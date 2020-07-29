@@ -1,2 +1,0 @@
-Send thread returns but not recv thread
-    - 2 SIGINTs and then input to stdin

@@ -23,7 +23,7 @@
 
 // TODO standard signal error handling
 void sa_handle(int signal, siginfo_t *info, void *ucontext) {
-    eflag = FDISCONNECT;
+    connected = 0;
 }
 
 int main(int argc, char **argv) {
@@ -108,12 +108,10 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  /* Join threads to main, end connection */
+  /* Wait for threads to terminate and exit */
   pthread_join(sendertid, NULL);
   pthread_join(receivertid, NULL);
 
-  printf("joined with main\n");
-  disconnect();
   close(sockfd);
   return 0;
 }

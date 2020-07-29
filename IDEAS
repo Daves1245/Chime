@@ -1,6 +1,0 @@
-Room organization -
-        One thread listens on a single port, spawning room threads
-    every time a client wishes to create a room. All conversation
-    then happens through a port unique to that room.
-    Why?
-        - No idea

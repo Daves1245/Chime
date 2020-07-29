@@ -22,39 +22,36 @@ struct handlerinfo {
 };
 
 void disconnect();                                  /* Terminate the current connection */
-void getinput(char *dest, size_t *res, size_t len); /* store '\n'-terminated line at most len into dest and modify *res accordingly */
+void getinput(char *dest, size_t *res, size_t len); /* store line of text at most len into dest and modify *res accordingly */
 void *thread_recv(void *);                          /* Message receiving thread */
 void *thread_send(void *);                          /* Message sending thread */
 void *connection_handler(void *);                   /* Connection handling thread */
 
-volatile sig_atomic_t eflag;
+volatile sig_atomic_t connected = 1;
 
 /*
- * XXX - implement actual end connection protocol
- * - check for recognition of logging off
- * - make asynchronous-safe and reentrant compliant
+ * XXX Create and implement robust disconnect protocol
+ * - 
  */
-void disconnect(void) {
+void disconnect(int sfd) {
     struct message tmp;
     memset(&tmp, 0, sizeof tmp);
     strcpy(tmp.txt, "/exit");
+    timestampmessage(&tmp);
+    tmp.flags = FDISCONNECT;
     sendmessage(sfd, &tmp);
     close(sfd);
     printf("\nDisconnected\n");
     _Exit(EXIT_SUCCESS);
 }
 
-/*
- *the more i work on this the more i realize i'm
- just making a bad IRC clone for C.
- */
 // XXX
 void *thread_recv(void *handlei) {
     struct handlerinfo *info = handlei;
     struct message msg;
     memset(&msg, 0, sizeof msg);
 
-    while (eflag != FDISCONNECT) {
+    while (connected) {
         recvmessage(info->sfd, &msg);
         switch (msg.flags) {
             case FDISCONNECT:
@@ -72,7 +69,6 @@ void *thread_recv(void *handlei) {
                 break;
         }
     }
-    printf("leaving recv\n");
     return NULL;
 }
 
@@ -89,17 +85,17 @@ void *thread_send(void *handlei) {
     listener.fd = 0; // poll for stdin
     listener.events = POLLIN; // wait till we have input
 
-    while (eflag != FDISCONNECT) {
+    while (connected) {
         if (poll(&listener, 1, POLL_TIMEOUT) && listener.revents == POLLIN) {
             /* XXX Grab input, check for exit */
             packmessage(&msg);
             msg.id++;
+            if (strcmp(msg.txt, "/exit\n") == 0) { // fgets stores \n in buff
+                connected = 0;
+            }
             sendmessage(info->sfd, &msg);
         }
     }
-    packmessage(&msg);
-    msg.id++;
-    strcpy(msg.txt, "/exit");
-    printf("leaving send\n");
+    disconnect(info->sfd);
     return NULL;
 }
