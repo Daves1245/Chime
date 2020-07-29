@@ -21,7 +21,10 @@
 #define PORT "33401"
 #define BACKLOG 10
 
-void broadcastmsg(struct message *m);               /* Broadcast msg to all users */
+#define UPTIME_STR_LEN 10
+#define LOGBUFF_STR_LEN 100
+
+void broadcastmsg(struct message *m);           /* Broadcast msg to all users */
 void broadcast(const char *msg, size_t msglen); /* To be deprecated */
 void *manager(void *arg);                       /* Manager thread for connections */
 
@@ -34,6 +37,19 @@ struct user *usrs_connected;
 int num_usrs, usr_capacity = BACKLOG;
 int usrs_dynamic;
 
+/* Non invasive linked list */
+struct list_head {
+  struct list_head *prev, *next;
+};
+
+struct online_user {
+  struct user usrinfo;
+  struct list_head list;
+  int sfd;
+  char logon_time[UPTIME_STR_LEN];
+  int permission_lvl;
+};
+
 void logs(const char *str) {
   time_t rtime;
   struct tm *now;
@@ -41,6 +57,8 @@ void logs(const char *str) {
   now = localtime(&rtime);
   printf(CYAN "[%d:%d]: " ANSI_RESET "%s\n", now->tm_hour, now->tm_min, str);
 }
+
+struct online_user *usrs_online_list;
 
 // TODO convert to linked list
 void add_usr(struct user *usr) {
@@ -67,9 +85,24 @@ void add_usr(struct user *usr) {
   }
 }
 
+void add_online_usr(struct user *usr) {
+  struct online_user *tmp = malloc(sizeof(struct online_user));
+  if (!tmp) {
+    fprintf(stderr, RED "error allocating memory for new user\n" ANSI_RESET);
+    return;
+  }
+  tmp->user.uid = usr->uid;
+  strcpy(user.handle, usr->handle);
+  tmp->head.next = tmp->head.prev = &tmp->head;
+  list_add(usrs_online_list->head, tmp);
+}
+
 void rm_usr(struct user *usr) {
 
 }
+
+void connect_usr();
+void disconnect_usr();
 
 /* Broadcast a message to all users */
 void broadcast(const char *msg, size_t msglen) {
@@ -90,7 +123,7 @@ void broadcast(const char *msg, size_t msglen) {
 }
 
 void broadcastmsg(struct message *m) {
-  char logbuff[100 + MAX_TEXT_LEN];
+  char logbuff[LOGBUFF_STR_LEN + MAX_TEXT_LEN];
   sprintf(logbuff, BLUE "BROADCAST: " ANSI_RESET "%s", m->txt);
   logs(logbuff);
   for (int i = 0; i < numconns; i++) {
@@ -106,7 +139,7 @@ void *manager(void *arg) {
   while (1) {
     if (poll(listener, numconns, 1)) {
       for (int i = 0; i < numconns; i++) {
-        char logbuff[100 + MAX_TEXT_LEN]; // XXX make logs var args. tmp hack fix
+        char logbuff[LOGBUFF_STR_LEN + MAX_TEXT_LEN]; // XXX make logs var args. tmp hack fix
         if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
           recvmessage(listener[i].fd, &m);
           if (strcmp(m.txt, "/exit") == 0) {
@@ -138,7 +171,7 @@ int main(int argc, char **argv) {
   char s[INET6_ADDRSTRLEN];
   int rv;
   char *port = PORT;
-  char logbuff[100];
+  char logbuff[LOGBUFF_STR_LEN];
 
   if (argc >= 2) {
     port = argv[2];
