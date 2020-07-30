@@ -25,6 +25,8 @@ void broadcastmsg(struct message *m);               /* Broadcast msg to all user
 void broadcast(const char *msg, size_t msglen); /* To be deprecated */
 void *manager(void *arg);                       /* Manager thread for connections */
 
+int showchat = 1;
+
 struct pollfd listener[BACKLOG]; // connections 
 int numconns;
 
@@ -56,7 +58,10 @@ void broadcast(const char *msg, size_t msglen) {
 
 void broadcastmsg(struct message *m) {
     char logbuff[100 + MAX_TEXT_LEN];
-    sprintf(logbuff, BLUE "BROADCAST: " ANSI_RESET "%s", m->txt);
+    if (showchat) {
+      puts(BLUE "BROADCAST:" ANSI_RESET);
+      showmessage(m);
+    }
     logs(logbuff);
     for (int i = 0; i < numconns; i++) {
         if (listener[i].fd > 0) {

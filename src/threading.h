@@ -41,7 +41,8 @@ void disconnect(int sfd) {
     tmp.flags = FDISCONNECT;
     sendmessage(sfd, &tmp);
     close(sfd);
-    printf("\nDisconnected\n");
+    puts("\nDisconnected");
+    // XXX remove _Exit
     _Exit(EXIT_SUCCESS);
 }
 

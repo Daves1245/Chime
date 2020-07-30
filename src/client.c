@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
   int sockfd;
   struct addrinfo hints, *servinfo, *p;
   int rv;
-  char s[INET6_ADDRSTRLEN];
+  char serverip[INET6_ADDRSTRLEN];
   struct user usr;
   struct handlerinfo info;
   char *hostname = LOCALHOST;
@@ -68,9 +68,9 @@ int main(int argc, char **argv) {
     fprintf(stderr, "client: failed to connect\n");
     return 2;
   }
-  inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr), s, sizeof s);
+  inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr), serverip, sizeof serverip);
 
-  printf(GREEN "Connected to %s\n" ANSI_RESET, s);
+  printf(GREEN "Connected to %s\n" ANSI_RESET, serverip);
   freeaddrinfo(servinfo); // all done with this structure 
 
   /* Implement signal handling */
@@ -112,6 +112,11 @@ int main(int argc, char **argv) {
   pthread_join(sendertid, NULL);
   pthread_join(receivertid, NULL);
 
+  if (!connected) {
+    printf("Disconnected from %s\n", serverip);
+  } else {
+    fprintf(stderr, "error: threads terminated before connection closed\n");
+  }
   close(sockfd);
   return 0;
 }
