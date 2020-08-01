@@ -35,7 +35,10 @@ int numconns;
 
 /* Disconnect from a client */
 void disconnect(int sfd) {
-
+  struct message fin;
+  memset(&fin, 0, sizeof fin);
+  fin.flags = FDISCONNECT;
+  sendmessage(sfd, &fin);
 }
 
 void logs(const char *str) {
@@ -88,6 +91,9 @@ void *manager(void *arg) {
           if (m.flags == FCONNECT) {
             struct message ret;
             struct user newusr;
+
+            memset(&ret, 0, sizeof ret);
+            memset(&newusr, 0, sizeof newusr);
             strcpy(newusr.handle, m.from);
             register_user(&newusr);
             if (newusr.uid < 0) {
@@ -97,7 +103,7 @@ void *manager(void *arg) {
               disconnect(listener[i].fd);
             }
           }
-          debugmessage(&m);
+          // debugmessage(&m);
           if (strcmp(m.txt, "/exit") == 0) {
             sprintf(logbuff, "Disconnecting client on socket fd: %d", listener[i].fd); // XXX var args logs
             close(listener[i].fd);
