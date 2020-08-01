@@ -17,7 +17,6 @@
 
 struct handlerinfo {
     int sfd;
-    char *handle;
     struct user *usr;
 };
 

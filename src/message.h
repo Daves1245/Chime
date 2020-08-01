@@ -9,12 +9,12 @@
 #define TS_LEN 20
 
 struct message {
-  uint64_t id;      /* Unique message id */
+  int id;      /* Unique message id */
+  int uid;  /* ID of user that message belongs to */
   char timestmp[TS_LEN];
-  uint32_t uid;  /* ID of user that message belongs to */
   char from[HANDLE_LEN + 1];
   char txt[MAX_TEXT_LEN + 1]; /* Text message being sent */
-  uint32_t flags;   /* message flags */
+  int flags;
 };
 
 void hashmsg(struct message *msg, char *res);                   /* Hash a message and store it in res */

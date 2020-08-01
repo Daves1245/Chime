@@ -38,6 +38,7 @@ int timestampmessage(struct message *msg) {
 }
 
 int packmessage(struct message *msg) {
+  msg->flags = FMSG;
   fgets(msg->txt, MAX_TEXT_LEN + 1, stdin);
   if (msg->txt[0] == '/') {
     cmdparse(msg);
@@ -49,6 +50,7 @@ int packmessage(struct message *msg) {
 int makemessage(const struct user *usr, struct message *msg) {
     msg->uid = usr->uid;
     strcpy(msg->from, usr->handle);
+    msg->flags = FCONNECT;
     return 0;
 }
 
@@ -117,7 +119,7 @@ int sendmessage(int fd, const struct message *msg) {
     /* One buffer large enough to store each field - and their respective null byte */
     char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + HANDLE_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 5];
     memset(buff, 0, sizeof buff);
-    sprintf(buff, "%" PRIu64 "\n%" PRIu32 "\n%s\n%s\n%" PRIu32 "\n%c", msg->id, msg->uid, msg->from, msg->txt, msg->flags, '\0');
+    sprintf(buff, "%d\n%d\n%s\n%s\n%d\n%c", msg->id, msg->uid, msg->from, msg->txt, msg->flags, '\0');
     size_t sent = 0, tosend = strlen(buff);
     while ((sent = send(fd, buff, tosend - sent, 0)) != tosend) {
         if (sent < 0) {

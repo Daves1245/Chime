@@ -45,8 +45,7 @@ int main(int argc, char **argv) {
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_STREAM;
 
-  if ((rv = getaddrinfo(hostname, PORT, &hints, &servinfo)) != 0) {
-    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+  if ((rv = getaddrinfo(hostname, PORT, &hints, &servinfo)) != 0) { fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
     return 1;
   }
 
@@ -88,9 +87,10 @@ int main(int argc, char **argv) {
   /* Tell the server who we are */
   printf("handle:");
   scanf("%s", usr.handle);
+  // XXX ask server for uid
+  usr.uid = 1;
 
   info.sfd = sockfd;
-  info.handle = usr.handle;
   info.usr = &usr;
 
   pthread_t sendertid;
