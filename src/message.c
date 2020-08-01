@@ -8,6 +8,8 @@
 #include "message.h"
 #include "colors.h"
 #include "user.h"
+#include "status.h"
+#include "types.h"
 
 /***********
  * XXX
@@ -28,7 +30,7 @@ static void cmdparse(struct message *msg) {
   }
 }
 
-int timestampmessage(struct message *msg) {
+STATUS timestampmessage(struct message *msg) {
   time_t rtime;
   struct tm *now;
   time(&rtime);
@@ -37,7 +39,7 @@ int timestampmessage(struct message *msg) {
   return 0;
 }
 
-int packmessage(struct message *msg) {
+STATUS packmessage(struct message *msg) {
   fgets(msg->txt, MAX_TEXT_LEN + 1, stdin);
   if (msg->txt[0] == '/') {
     cmdparse(msg);
@@ -46,14 +48,14 @@ int packmessage(struct message *msg) {
   return 0;
 }
 
-int makemessage(const struct user *usr, struct message *msg) {
+STATUS makemessage(const struct user *usr, struct message *msg) {
     msg->uid = usr->uid;
     strcpy(msg->from, usr->handle);
     return 0;
 }
 
 // XXX FIX THIS ASAP
-int recvmessage(int sfd, struct message *msg) {
+STATUS recvmessage(int sfd, struct message *msg) {
     char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 4] = { 0 };
     size_t bread;
     char *tmp = NULL;
@@ -63,7 +65,7 @@ int recvmessage(int sfd, struct message *msg) {
     while (!tmp) {
         len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
         if (len == 0) {
-            return ECONNCLSD;
+          return ERROR_CONNECTION_LOST;
         }
         bread += len;
         tmp = strtok(NULL, "\n");
@@ -73,7 +75,7 @@ int recvmessage(int sfd, struct message *msg) {
     while (!tmp) {
         len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
         if (len == 0) {
-            return ECONNCLSD;
+          return ERROR_CONNECTION_LOST;
         }
         bread += len;
         tmp = strtok(NULL, "\n");
@@ -83,7 +85,7 @@ int recvmessage(int sfd, struct message *msg) {
     while (!tmp) {
         len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
         if (len == 0) {
-            return ECONNCLSD;
+          return ERROR_CONNECTION_LOST;
         }
         bread += len;
         tmp = strtok(NULL, "\n");
@@ -93,7 +95,7 @@ int recvmessage(int sfd, struct message *msg) {
     while (!tmp) {
         len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
         if (len == 0) {
-            return ECONNCLSD;
+          return ERROR_CONNECTION_LOST;
         }
         bread += len;
         tmp = strtok(NULL, "\n");
@@ -103,7 +105,7 @@ int recvmessage(int sfd, struct message *msg) {
     while (!tmp) {
         len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
         if (len == 0) {
-            return ECONNCLSD;
+          return ERROR_CONNECTION_LOST;
         }
         bread += len;
         tmp = strtok(NULL, "\n");
@@ -113,7 +115,7 @@ int recvmessage(int sfd, struct message *msg) {
 }
 
 /* Unpack struct, send each field as char stream */
-int sendmessage(int fd, const struct message *msg) {
+STATUS sendmessage(int fd, const struct message *msg) {
     /* One buffer large enough to store each field - and their respective null byte */
     char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + HANDLE_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 5];
     memset(buff, 0, sizeof buff);

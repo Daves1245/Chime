@@ -52,7 +52,10 @@ void *thread_recv(void *handlei) {
     memset(&msg, 0, sizeof msg);
 
     while (connected) {
-        recvmessage(info->sfd, &msg);
+      if (recvmessage(info->sfd, &msg) == ERROR_CONNECTION_LOST) {
+        // XXX give a 'server closed connection' return state to thread
+        return NULL;
+      }
         switch (msg.flags) {
             case FDISCONNECT:
                 printf(YELLOW "[%s left the chat]" ANSI_RESET "\n", msg.from);

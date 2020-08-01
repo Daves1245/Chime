@@ -28,27 +28,78 @@ void broadcastmsg(struct message *m);           /* Broadcast msg to all users */
 void broadcast(const char *msg, size_t msglen); /* To be deprecated */
 void *manager(void *arg);                       /* Manager thread for connections */
 
-struct pollfd listener[BACKLOG]; // connections 
+struct pollfd listener[BACKLOG]; // connections
 int numconns;
-
-/* TODO change BACKLOG */
-struct user usrs_connected_base[BACKLOG];
-struct user *usrs_connected;
-int num_usrs, usr_capacity = BACKLOG;
-int usrs_dynamic;
 
 /* Non invasive linked list */
 struct list_head {
   struct list_head *prev, *next;
 };
 
-struct online_user {
-  struct user usrinfo;
-  struct list_head list;
-  int sfd;
-  char logon_time[UPTIME_STR_LEN];
-  int permission_lvl;
+struct connection {
+  int sfd;                        /* Socket on which usr is connected */
+  struct user uinfo;              /* User info */
+  struct connection *next, *prev; /* Make this a linked list */
 };
+
+struct connection *connections;
+
+int next_uid;
+
+/*
+ * name: register_user
+ * params: uhints
+ *
+ * Check if provided user hints are valid
+ * and if so, register the new user. Returns
+ * negative on invalid user data and sets
+ * the user uid to -1
+ *
+ * RETURN VALUE:
+ * positive uid if valid user info, -1 on
+ * invalid.
+ */
+int register_user(struct user *uhints) {
+  struct connection *iterator, *conn;
+  printf("%d\n", connections->uinfo.uid);
+  if (connections->uinfo.uid == -1) {
+    memcpy(&connections->uinfo, uhints, sizeof(*uhints));
+    return connections->uinfo.uid = next_uid++;
+  }
+  for (iterator = connections; iterator && iterator->next != connections; iterator = iterator->next) {
+    if (strcmp(iterator->uinfo.handle, uhints->handle) == 0) {
+      break;
+    }
+  }
+  if (iterator->next == connections) {
+    return uhints->uid = -1;
+  }
+  conn = malloc(sizeof(*conn));
+  memset(conn, 0, sizeof(*conn));
+  if (!conn) {
+    fprintf(stderr, "Could not allocate space for new connection\n");
+    perror("mallloc");
+    _Exit(EXIT_FAILURE);
+  }
+  connections->prev->next = conn;
+  conn->prev = connections->prev;
+  connections->prev = conn;
+  conn->next = connections;
+  memcpy(&conn->uinfo, uhints, sizeof(*uhints));
+  return conn->uinfo.uid = next_uid++;
+}
+
+int logoff_user(int sfd) {
+  return 1;
+}
+
+void disconnect(int sfd) {
+  struct message fin;
+  memset(&fin, 0, sizeof fin);
+  fin.flags = FDISCONNECT;
+  sendmessage(sfd, &fin);
+  close(sfd);
+}
 
 void logs(const char *str) {
   time_t rtime;
@@ -57,52 +108,6 @@ void logs(const char *str) {
   now = localtime(&rtime);
   printf(CYAN "[%d:%d]: " ANSI_RESET "%s\n", now->tm_hour, now->tm_min, str);
 }
-
-struct online_user *usrs_online_list;
-
-// TODO convert to linked list
-void add_usr(struct user *usr) {
-  if (!usrs_dynamic && num_usrs == usr_capacity) {
-    usr_capacity *= 2;
-    struct user *tmp = malloc(sizeof(struct user) * usr_capacity);
-    if (!tmp) {
-      // TODO
-      fprintf(stderr, "error allocating memory for new users. Blocking further connections.\n");
-    } else {
-      usrs_connected = tmp;
-      for (int i = 0; i < BACKLOG; i++) {
-        memcpy(&usrs_connected[i], &usrs_connected_base[i], sizeof(struct user));
-      }
-    }
-  } else if (num_usrs == usr_capacity) {
-    usr_capacity *= 2;
-    struct user *tmp = realloc(usrs_connected, sizeof(struct user) * usr_capacity);
-    if (!tmp) {
-      fprintf(stderr, "error allocating memory for new users. Blocking further connections\n");
-    } else {
-      usrs_connected = tmp;
-    }
-  }
-}
-
-void add_online_usr(struct user *usr) {
-  struct online_user *tmp = malloc(sizeof(struct online_user));
-  if (!tmp) {
-    fprintf(stderr, RED "error allocating memory for new user\n" ANSI_RESET);
-    return;
-  }
-  tmp->user.uid = usr->uid;
-  strcpy(user.handle, usr->handle);
-  tmp->head.next = tmp->head.prev = &tmp->head;
-  list_add(usrs_online_list->head, tmp);
-}
-
-void rm_usr(struct user *usr) {
-
-}
-
-void connect_usr();
-void disconnect_usr();
 
 /* Broadcast a message to all users */
 void broadcast(const char *msg, size_t msglen) {
@@ -142,6 +147,34 @@ void *manager(void *arg) {
         char logbuff[LOGBUFF_STR_LEN + MAX_TEXT_LEN]; // XXX make logs var args. tmp hack fix
         if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
           recvmessage(listener[i].fd, &m);
+
+          /* Connect a new user */
+          if (m.flags == FCONNECT) {
+            printf("connecting client\n");
+            struct message ret;
+            struct connection *conn;
+
+            memset(&ret, 0, sizeof ret);
+            conn = malloc(sizeof(struct connection));
+
+            if (!conn) {
+              fprintf(stderr, "Could not allocate memory for user connection\n");
+              /* XXX disconnect all users here */
+              _Exit(EXIT_FAILURE);
+            }
+
+            conn->sfd = listener[i].fd;
+            strcpy(conn->uinfo.handle, m.from);
+            register_user(&conn->uinfo);
+            if (conn->uinfo.uid < 0) {
+              sprintf(ret.txt, "A user with the name %s already exists\n", conn->uinfo.handle);
+              ret.flags = ECONNREFUSED;
+              sendmessage(conn->sfd, &ret);
+              disconnect(conn->sfd);
+            }
+          }
+
+          /* Disconnect a user */
           if (strcmp(m.txt, "/exit") == 0) {
             sprintf(logbuff, "Disconnecting client on socket fd: %d", listener[i].fd); // XXX var args logs
             close(listener[i].fd);
@@ -177,7 +210,9 @@ int main(int argc, char **argv) {
     port = argv[2];
   }
 
-  usrs_connected = usrs_connected_base;
+  connections = malloc(sizeof(*connections));
+  connections->uinfo.uid = -1;
+  connections->next = connections->prev = connections;
 
   sprintf(logbuff, "Creating server on port %s", PORT); // XXX logs var args
   logs(logbuff);

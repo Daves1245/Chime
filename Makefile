@@ -8,7 +8,7 @@ DIR_GUARD=@mkdir -p $(@D)
 # Build Configurations
 CFG=release
 ifeq ($(CFG), debug)
-	FLAGS += -g -DDEBUG
+	FLAGS += -g -g3 -O0 -DDEBUG
 endif
 ifneq ($(CFG),debug)
 ifneq ($(CFG),release)
