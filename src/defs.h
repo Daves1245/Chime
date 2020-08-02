@@ -25,7 +25,6 @@
 #define FMSG 0x0
 #define FCONNECT 0x1
 #define FDISCONNECT 0x2
-#define ECONNDROPPED 0x3
 
 /* Errors */
 #define ECONNCLSD -1 

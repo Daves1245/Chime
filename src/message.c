@@ -8,8 +8,6 @@
 #include "message.h"
 #include "colors.h"
 #include "user.h"
-#include "status.h"
-#include "types.h"
 
 /***********
  * XXX
@@ -19,16 +17,6 @@
  * - chat storing (locally and server side)
  * - more user commands
  ***********/
-
-void debugmessage(const struct message *m) {
-  printf("---MESSAGE---\n");
-  printf("[id]: `%d`\n", m->id);
-  printf("[uid]: `%d`\n", m->uid);
-  printf("[timestamp]: `%s`\n", m->timestmp);
-  printf("[from]: `%s`\n", m->from);
-  printf("[txt]: `%s`\n", m->txt);
-  printf("[flags]:`%d`\n", m->flags);
-}
 
 void showmessage(const struct message *msg) {
   printf(CYAN "[%s]" ANSI_RESET ":%s\n", msg->from, msg->txt);
@@ -40,7 +28,7 @@ static void cmdparse(struct message *msg) {
   }
 }
 
-STATUS timestampmessage(struct message *msg) {
+int timestampmessage(struct message *msg) {
   time_t rtime;
   struct tm *now;
   time(&rtime);
@@ -49,7 +37,8 @@ STATUS timestampmessage(struct message *msg) {
   return 0;
 }
 
-STATUS packmessage(struct message *msg) {
+int packmessage(struct message *msg) {
+  msg->flags = FMSG;
   fgets(msg->txt, MAX_TEXT_LEN + 1, stdin);
   if (msg->txt[0] == '/') {
     cmdparse(msg);
@@ -58,7 +47,7 @@ STATUS packmessage(struct message *msg) {
   return 0;
 }
 
-STATUS makemessage(const struct user *usr, struct message *msg) {
+int makemessage(const struct user *usr, struct message *msg) {
     msg->uid = usr->uid;
     strcpy(msg->from, usr->handle);
     msg->flags = FCONNECT;
@@ -66,7 +55,7 @@ STATUS makemessage(const struct user *usr, struct message *msg) {
 }
 
 // XXX FIX THIS ASAP
-STATUS recvmessage(int sfd, struct message *msg) {
+int recvmessage(int sfd, struct message *msg) {
     char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 4] = { 0 };
     size_t bread;
     char *tmp = NULL;
@@ -76,7 +65,7 @@ STATUS recvmessage(int sfd, struct message *msg) {
     while (!tmp) {
         len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
         if (len == 0) {
-          return ERROR_CONNECTION_LOST;
+            return ECONNCLSD;
         }
         bread += len;
         tmp = strtok(NULL, "\n");
@@ -86,7 +75,7 @@ STATUS recvmessage(int sfd, struct message *msg) {
     while (!tmp) {
         len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
         if (len == 0) {
-          return ERROR_CONNECTION_LOST;
+            return ECONNCLSD;
         }
         bread += len;
         tmp = strtok(NULL, "\n");
@@ -96,7 +85,7 @@ STATUS recvmessage(int sfd, struct message *msg) {
     while (!tmp) {
         len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
         if (len == 0) {
-          return ERROR_CONNECTION_LOST;
+            return ECONNCLSD;
         }
         bread += len;
         tmp = strtok(NULL, "\n");
@@ -106,7 +95,7 @@ STATUS recvmessage(int sfd, struct message *msg) {
     while (!tmp) {
         len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
         if (len == 0) {
-          return ERROR_CONNECTION_LOST;
+            return ECONNCLSD;
         }
         bread += len;
         tmp = strtok(NULL, "\n");
@@ -116,7 +105,7 @@ STATUS recvmessage(int sfd, struct message *msg) {
     while (!tmp) {
         len = recv(sfd, buff + bread, sizeof(buff) - bread, 0);  
         if (len == 0) {
-          return ERROR_CONNECTION_LOST;
+            return ECONNCLSD;
         }
         bread += len;
         tmp = strtok(NULL, "\n");
@@ -126,7 +115,7 @@ STATUS recvmessage(int sfd, struct message *msg) {
 }
 
 /* Unpack struct, send each field as char stream */
-STATUS sendmessage(int fd, const struct message *msg) {
+int sendmessage(int fd, const struct message *msg) {
     /* One buffer large enough to store each field - and their respective null byte */
     char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + HANDLE_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 5];
     memset(buff, 0, sizeof buff);
