@@ -124,10 +124,9 @@ void *manager(void *arg) {
   while (1) {
     if (poll(listener, numconns, 1)) {
       for (int i = 0; i < numconns; i++) {
-        char logbuff[LOGBUFF_STR_LEN + MAX_TEXT_LEN]; // XXX make logs var args. tmp hack fix
+        char logbuff[LOGBUFF_STR_LEN + MAX_TEXT_LEN];
         if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
           recvmessage(listener[i].fd, &m);
-
           /* Connect a new user */
           if (m.flags == FCONNECT) {
             struct message ret;
@@ -151,8 +150,7 @@ void *manager(void *arg) {
               sprintf(ret.txt, "A user with the name %s already exists", conn->uinfo.handle);
               ret.flags = ECONNDROPPED;
               sendmessage(conn->sfd, &ret);
-              disconnect_wrapper(conn->sfd);
-              listener[i].fd = -listener[i].fd; // remove from poll() query
+              // disconnect_wrapper(listener[i].fd);
               continue;
             }
           }

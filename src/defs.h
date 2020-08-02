@@ -20,7 +20,7 @@
 #define UINT32_BASE10_LEN 12 // XXX number of base10 digits needed to store all values of 32 bit integer
 
 /* Wait for input in ms */
-#define POLL_TIMEOUT 10
+#define POLL_TIMEOUT 100
 
 #define FMSG 0x0
 #define FCONNECT 0x1

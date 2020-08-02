@@ -64,7 +64,7 @@ STATUS makemessage(const struct user *usr, struct message *msg) {
     return 0;
 }
 
-// XXX FIX THIS ASAP
+// TODO fix
 STATUS recvmessage(int sfd, struct message *msg) {
     char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 4] = { 0 };
     size_t bread;
@@ -121,7 +121,7 @@ STATUS recvmessage(int sfd, struct message *msg) {
         tmp = strtok(NULL, "\n");
     }
     msg->flags = atoll(tmp);
-    return 0;
+    return OK;
 }
 
 /* Unpack struct, send each field as char stream */

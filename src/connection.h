@@ -36,6 +36,12 @@ void disconnect_wrapper(int sfd) {
   disconnect(&conn);
 }
 
+void disconnect_wrapper_and_exit(int sfd) {
+  disconnect_wrapper(sfd);
+  printf("\nDisconnected\n");
+  _Exit(EXIT_SUCCESS);
+}
+
 void disconnect_and_exit(struct connection *conn) {
   disconnect(conn);
   printf("\nDisconnected\n");

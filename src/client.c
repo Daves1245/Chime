@@ -26,16 +26,32 @@ void sa_handle(int signal, siginfo_t *info, void *ucontext) {
     connected = 0;
 }
 
+// XXX
+/*
+STATUS login(struct connection *conn) {
+  struct message request;
+  memset(&request, 0, sizeof request);
+  printf("handle:");
+  fgets(conn->uinfo.handle, HANDLE_LEN + 1, stdin);
+  strcpy(request.from, conn->uinfo.handle);
+  request.uid = request.id = -1;
+  timestampmessage(&request);
+  request.flags = FCONNECT;
+  sendmessage(conn->sfd, &request);
+  return OK;
+}
+*/
+
 int main(int argc, char **argv) {
   int sockfd;
   struct addrinfo hints, *servinfo, *p;
   int rv;
-  char s[INET6_ADDRSTRLEN];
-  struct user usr;
-  struct handlerinfo info;
+  char serverip[INET6_ADDRSTRLEN];
   char *hostname = LOCALHOST;
   struct sigaction s_act, s_oldact;
   int res;
+
+  struct connection conn;
 
   if (argc > 1) {
       hostname = argv[1];
@@ -68,9 +84,9 @@ int main(int argc, char **argv) {
     fprintf(stderr, "client: failed to connect\n");
     return 2;
   }
-  inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr), s, sizeof s);
+  inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr), serverip, sizeof serverip);
 
-  printf(GREEN "Connected to %s\n" ANSI_RESET, s);
+  printf(GREEN "Connected to %s\n" ANSI_RESET, serverip);
   freeaddrinfo(servinfo); // all done with this structure 
 
   /* Implement signal handling */
@@ -85,23 +101,23 @@ int main(int argc, char **argv) {
       perror("sigaction:");
   }
 
+  conn.sfd = sockfd;
+  //login(&conn);
+
   /* Tell the server who we are */
   printf("handle:");
-  scanf("%s", usr.handle);
-
-  info.sfd = sockfd;
-  info.usr = &usr;
+  fgets(conn.uinfo.handle, HANDLE_LEN + 1, stdin);
 
   pthread_t sendertid;
   pthread_t receivertid;
 
-  if (pthread_create(&sendertid, NULL, thread_send, &info)) {
+  if (pthread_create(&sendertid, NULL, thread_send, &conn)) {
     fprintf(stderr, "Could not create msg sender thread\n");
     perror("pthread_create");
     exit(EXIT_FAILURE);
   }
 
-  if (pthread_create(&receivertid, NULL, thread_recv, &info)) {
+  if (pthread_create(&receivertid, NULL, thread_recv, &conn)) {
     fprintf(stderr, "Could not create msg receiving thread\n");
     perror("pthread_create");
     exit(EXIT_FAILURE);
