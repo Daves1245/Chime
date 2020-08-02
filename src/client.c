@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
   int sockfd;
   struct addrinfo hints, *servinfo, *p;
   int rv;
-  char serverip[INET6_ADDRSTRLEN];
+  char s[INET6_ADDRSTRLEN];
   struct user usr;
   struct handlerinfo info;
   char *hostname = LOCALHOST;
@@ -45,7 +45,8 @@ int main(int argc, char **argv) {
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_STREAM;
 
-  if ((rv = getaddrinfo(hostname, PORT, &hints, &servinfo)) != 0) { fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+  if ((rv = getaddrinfo(hostname, PORT, &hints, &servinfo)) != 0) {
+    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
     return 1;
   }
 
@@ -67,9 +68,9 @@ int main(int argc, char **argv) {
     fprintf(stderr, "client: failed to connect\n");
     return 2;
   }
-  inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr), serverip, sizeof serverip);
+  inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr), s, sizeof s);
 
-  printf(GREEN "Connected to %s\n" ANSI_RESET, serverip);
+  printf(GREEN "Connected to %s\n" ANSI_RESET, s);
   freeaddrinfo(servinfo); // all done with this structure 
 
   /* Implement signal handling */
@@ -87,8 +88,6 @@ int main(int argc, char **argv) {
   /* Tell the server who we are */
   printf("handle:");
   scanf("%s", usr.handle);
-  // XXX ask server for uid
-  usr.uid = 1;
 
   info.sfd = sockfd;
   info.usr = &usr;
@@ -112,11 +111,6 @@ int main(int argc, char **argv) {
   pthread_join(sendertid, NULL);
   pthread_join(receivertid, NULL);
 
-  if (!connected) {
-    printf("Disconnected from %s\n", serverip);
-  } else {
-    fprintf(stderr, "error: threads terminated before connection closed\n");
-  }
   close(sockfd);
   return 0;
 }

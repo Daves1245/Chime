@@ -15,6 +15,8 @@
  * - more user commands
  ***********/
 
+volatile sig_atomic_t connected = 1;
+
 struct handlerinfo {
     int sfd;
     struct user *usr;
@@ -25,8 +27,6 @@ void getinput(char *dest, size_t *res, size_t len); /* store line of text at mos
 void *thread_recv(void *);                          /* Message receiving thread */
 void *thread_send(void *);                          /* Message sending thread */
 void *connection_handler(void *);                   /* Connection handling thread */
-
-volatile sig_atomic_t connected = 1;
 
 /*
  * XXX Create and implement robust disconnect protocol
@@ -40,8 +40,7 @@ void disconnect(int sfd) {
     tmp.flags = FDISCONNECT;
     sendmessage(sfd, &tmp);
     close(sfd);
-    puts("\nDisconnected");
-    // XXX remove _Exit
+    printf("\nDisconnected\n");
     _Exit(EXIT_SUCCESS);
 }
 
@@ -52,7 +51,14 @@ void *thread_recv(void *handlei) {
     memset(&msg, 0, sizeof msg);
 
     while (connected) {
-        recvmessage(info->sfd, &msg);
+      STATUS s = recvmessage(info->sfd, &msg);
+#ifdef DEBUG
+        debugmessage(&msg);
+#endif
+      if (s == ERROR_CONNECTION_LOST) {
+        // XXX give a 'server closed connection' return state to thread
+        return NULL;
+      }
         switch (msg.flags) {
             case FDISCONNECT:
                 printf(YELLOW "[%s left the chat]" ANSI_RESET "\n", msg.from);
@@ -62,6 +68,9 @@ void *thread_recv(void *handlei) {
                 break;
             case FMSG:
                 showmessage(&msg);
+                break;
+            case ECONNDROPPED:
+                printf(RED "%s" ANSI_RESET "\n", msg.txt);
                 break;
             default:
                 printf(RED "[invalid flags, defaulting to displaymsg]" ANSI_RESET "\n");
