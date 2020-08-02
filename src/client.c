@@ -90,7 +90,6 @@ int main(int argc, char **argv) {
   scanf("%s", usr.handle);
 
   info.sfd = sockfd;
-  info.handle = usr.handle;
   info.usr = &usr;
 
   pthread_t sendertid;

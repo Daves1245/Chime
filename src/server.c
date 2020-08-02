@@ -17,6 +17,7 @@
 #include "common.h"
 #include "message.h"
 #include "defs.h"
+#include "connection.h"
 
 #define PORT "33401"
 #define BACKLOG 10
@@ -31,48 +32,35 @@ void *manager(void *arg);                       /* Manager thread for connection
 struct pollfd listener[BACKLOG]; // connections
 int numconns;
 
-/* Non invasive linked list */
+/* TODO Non invasive linked list */
 struct list_head {
   struct list_head *prev, *next;
 };
 
-struct connection {
-  int sfd;                        /* Socket on which usr is connected */
-  struct user uinfo;              /* User info */
-  struct connection *next, *prev; /* Make this a linked list */
-};
-
 struct connection *connections;
-
 int next_uid;
 
 /*
  * name: register_user
- * params: uhints
+ * params: urequest
  *
  * Check if provided user hints are valid
- * and if so, register the new user. Returns
- * negative on invalid user data and sets
- * the user uid to -1
- *
- * RETURN VALUE:
- * positive uid if valid user info, -1 on
- * invalid.
+ * and if so, register the new user. If
+ * given
  */
-int register_user(struct user *uhints) {
+STATUS register_user(struct user *urequest) {
   struct connection *iterator, *conn;
-  printf("%d\n", connections->uinfo.uid);
   if (connections->uinfo.uid == -1) {
-    memcpy(&connections->uinfo, uhints, sizeof(*uhints));
+    memcpy(&connections->uinfo, urequest, sizeof(*urequest));
     return connections->uinfo.uid = next_uid++;
   }
-  for (iterator = connections; iterator && iterator->next != connections; iterator = iterator->next) {
-    if (strcmp(iterator->uinfo.handle, uhints->handle) == 0) {
-      break;
+  for (iterator = connections; iterator->next != connections; iterator = iterator->next) {
+    if (strcmp(iterator->uinfo.handle, urequest->handle) == 0) {
+      return ERROR_USERNAME_IN_USE;
     }
   }
-  if (iterator->next == connections) {
-    return uhints->uid = -1;
+  if (strcmp(iterator->uinfo.handle, urequest->handle) == 0) {
+    return ERROR_USERNAME_IN_USE;
   }
   conn = malloc(sizeof(*conn));
   memset(conn, 0, sizeof(*conn));
@@ -85,20 +73,12 @@ int register_user(struct user *uhints) {
   conn->prev = connections->prev;
   connections->prev = conn;
   conn->next = connections;
-  memcpy(&conn->uinfo, uhints, sizeof(*uhints));
+  memcpy(&conn->uinfo, urequest, sizeof(*urequest));
   return conn->uinfo.uid = next_uid++;
 }
 
-int logoff_user(int sfd) {
-  return 1;
-}
-
-void disconnect(int sfd) {
-  struct message fin;
-  memset(&fin, 0, sizeof fin);
-  fin.flags = FDISCONNECT;
-  sendmessage(sfd, &fin);
-  close(sfd);
+STATUS logoff_user(int sfd) {
+  return OK;
 }
 
 void logs(const char *str) {
@@ -150,11 +130,12 @@ void *manager(void *arg) {
 
           /* Connect a new user */
           if (m.flags == FCONNECT) {
-            printf("connecting client\n");
             struct message ret;
             struct connection *conn;
 
             memset(&ret, 0, sizeof ret);
+            strcpy(ret.from, "SERVER");
+            timestampmessage(&ret);
             conn = malloc(sizeof(struct connection));
 
             if (!conn) {
@@ -165,12 +146,14 @@ void *manager(void *arg) {
 
             conn->sfd = listener[i].fd;
             strcpy(conn->uinfo.handle, m.from);
-            register_user(&conn->uinfo);
-            if (conn->uinfo.uid < 0) {
-              sprintf(ret.txt, "A user with the name %s already exists\n", conn->uinfo.handle);
-              ret.flags = ECONNREFUSED;
+            STATUS s = register_user(&conn->uinfo);
+            if (s == ERROR_USERNAME_IN_USE) {
+              sprintf(ret.txt, "A user with the name %s already exists", conn->uinfo.handle);
+              ret.flags = ECONNDROPPED;
               sendmessage(conn->sfd, &ret);
-              disconnect(conn->sfd);
+              disconnect_wrapper(conn->sfd);
+              listener[i].fd = -listener[i].fd; // remove from poll() query
+              continue;
             }
           }
 

@@ -20,6 +20,16 @@
  * - more user commands
  ***********/
 
+void debugmessage(const struct message *m) {
+  printf("---MESSAGE---\n");
+  printf("[id]: `%d`\n", m->id);
+  printf("[uid]: `%d`\n", m->uid);
+  printf("[timestamp]: `%s`\n", m->timestmp);
+  printf("[from]: `%s`\n", m->from);
+  printf("[txt]: `%s`\n", m->txt);
+  printf("[flags]:`%d`\n", m->flags);
+}
+
 void showmessage(const struct message *msg) {
   printf(CYAN "[%s]" ANSI_RESET ":%s\n", msg->from, msg->txt);
 }
@@ -119,7 +129,7 @@ STATUS sendmessage(int fd, const struct message *msg) {
     /* One buffer large enough to store each field - and their respective null byte */
     char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + HANDLE_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 5];
     memset(buff, 0, sizeof buff);
-    sprintf(buff, "%" PRIu64 "\n%" PRIu32 "\n%s\n%s\n%" PRIu32 "\n%c", msg->id, msg->uid, msg->from, msg->txt, msg->flags, '\0');
+    sprintf(buff, "%d\n%d\n%s\n%s\n%d\n%c", msg->id, msg->uid, msg->from, msg->txt, msg->flags, '\0');
     size_t sent = 0, tosend = strlen(buff);
     while ((sent = send(fd, buff, tosend - sent, 0)) != tosend) {
         if (sent < 0) {
