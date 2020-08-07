@@ -19,8 +19,8 @@ endif
 endif
 
 # Sources
-CLIENT_SOURCES=src/message.c src/client.c
-SERVER_SOURCES=src/message.c src/server.c
+CLIENT_SOURCES=src/message.c src/client.c src/transmitmsg.c src/connection.c
+SERVER_SOURCES=src/message.c src/server.c src/transmitmsg.c src/connection.c
 
 # Main targets
 .PHONY: all clean

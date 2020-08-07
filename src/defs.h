@@ -8,11 +8,9 @@
 #define MAX_RECV_LEN 100
 #define MAX_SEND_LEN 100
 
-#define MAX_PACKET_PAYLOAD_SIZE 1400
-#define MAX_PACKETS_PER_MSG 256 // handle input up to 358400 bytes long
-
 #define HANDLE_LEN 30
 #define MAX_TEXT_LEN 100
+#define TIMESTAMP_LEN 20
 
 #define HASH_LEN 256 // length of hash
 
@@ -25,7 +23,8 @@
 #define FMSG 0x0
 #define FCONNECT 0x1
 #define FDISCONNECT 0x2
-#define ECONNDROPPED 0x3
+#define FUPLOAD 0x3
+#define ECONNDROPPED 0x4
 
 /* Errors */
 #define ECONNCLSD -1 

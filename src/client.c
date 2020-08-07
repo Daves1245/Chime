@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <signal.h>
 #include <poll.h>
 
 #include "common.h"
@@ -16,6 +17,7 @@
 #include "colors.h"
 #include "defs.h"
 #include "threading.h"
+#include "transmitmsg.h"
 
 #define LOCALHOST "127.0.0.1"
 #define PORT "33401"

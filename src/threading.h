@@ -2,11 +2,15 @@
 #include <time.h>
 #include <signal.h>
 #include <math.h>
+// XXX #ifdef __linux__
+#include <sys/sendfile.h>
+#include <sys/stat.h>
 
 #include "colors.h"
 #include "defs.h"
 
 #include "connection.h"
+#include "transmitmsg.h"
 
 /***********
  * XXX
@@ -24,6 +28,22 @@ void getinput(char *dest, size_t *res, size_t len); /* store line of text at mos
 void *thread_recv(void *);                          /* Message receiving thread */
 void *thread_send(void *);                          /* Message sending thread */
 void *connection_handler(void *);                   /* Connection handling thread */
+
+STATUS uploadfile(struct connection *conn, int fd) {
+  struct stat st;
+  int s = fstat(fd, &st);
+  if (s < 0) {
+    perror("fstat");
+    return ERROR_NOT_SENT;
+  }
+  // TODO put this in a loop to guarantee it's all sent
+  int sent = sendfile(conn->sfd, fd, NULL, st.st_size);
+  if (sent < 0) {
+    perror("sendfile");
+    return ERROR_NOT_SENT;
+  }
+  return OK;
+}
 
 /*
  * XXX Create and implement robust disconnect protocol

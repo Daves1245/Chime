@@ -7,6 +7,9 @@
 #include "user.h"
 #include "status.h"
 #include "types.h"
+#include "connection.h"
+
+#define TIMESTAMP_LEN 20
 
 struct message {
   int id;      /* Unique message id */
@@ -21,6 +24,10 @@ void hashmsg(struct message *msg, char *res);                   /* Hash a messag
 void timestamp(struct message *m);                              /* XXX - Timestamp a message */
 void showmessage(const struct message *msg);                    /* Display a message to the screen */
 void debugmessage(const struct message *msg);                   /* Debug print a message */
+STATUS recvmessage(const struct connection *conn, struct message *msg);                  /* Receive a message coming in from sfd */
+STATUS sendmessage(const struct connection *conn, const struct message *msg);            /* Unpack a message, send it through fd */
+STATUS makemessage(const struct user *usr, struct message *msg);   /* Put user and other information in a message */
+STATUS packmessage(struct message *msg);                           /* Pack msg with appropriate info */
 STATUS timestampmessage(struct message *msg);                      /* Time stamp a message */
 
 #endif
