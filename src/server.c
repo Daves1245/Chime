@@ -47,45 +47,68 @@ struct list_head {
 struct connection *connections;
 int next_uid;
 
+void freeconnections(struct connection *c) {
+  struct connection *iterator;
+  for (iterator = connections; iterator->next != connections; iterator = iterator->next) {
+    disconnect(iterator);
+  }
+    disconnect(iterator);
+}
 /*
- * name: register_user
+ * name: login_user 
  * params: urequest
  *
  * Check if provided user hints are valid
- * and if so, register the new user. If
- * given
+ * and if so, login the new user.
  */
-STATUS register_user(struct user *urequest) {
-  struct connection *iterator, *conn;
-  if (connections->uinfo.uid == -1) {
-    memcpy(&connections->uinfo, urequest, sizeof(*urequest));
-    return connections->uinfo.uid = next_uid++;
+STATUS login_user(struct connection *entry) {
+  printf("logging user with sfd %d\n", entry->sfd);
+  struct connection *iterator;
+  if (!connections) {
+    connections = entry;
+    connections->next = connections->prev = entry;
+    return entry->uinfo.uid = next_uid++;
   }
   for (iterator = connections; iterator->next != connections; iterator = iterator->next) {
-    if (strcmp(iterator->uinfo.handle, urequest->handle) == 0) {
+    if (strcmp(iterator->uinfo.handle, entry->uinfo.handle) == 0) {
       return ERROR_USERNAME_IN_USE;
     }
   }
-  if (strcmp(iterator->uinfo.handle, urequest->handle) == 0) {
+  if (strcmp(iterator->uinfo.handle, entry->uinfo.handle) == 0) {
     return ERROR_USERNAME_IN_USE;
   }
-  conn = malloc(sizeof(*conn));
-  memset(conn, 0, sizeof(*conn));
-  if (!conn) {
-    fprintf(stderr, "Could not allocate space for new connection\n");
-    perror("mallloc");
-    _Exit(EXIT_FAILURE);
-  }
-  connections->prev->next = conn;
-  conn->prev = connections->prev;
-  connections->prev = conn;
-  conn->next = connections;
-  memcpy(&conn->uinfo, urequest, sizeof(*urequest));
-  return conn->uinfo.uid = next_uid++;
+
+  connections->prev->next = entry;
+  entry->prev = connections->prev;
+  connections->prev = entry;
+  entry->next = connections;
+  return OK;
 }
 
+/*
+ * TODO switch to use connection
+ * instead of socket file descriptors
+ * (after organization of user info)
+ *
+ * name: logoff_user
+ * params: int sfd
+ *
+ * remove a user from the current list of 
+ * active connections
+ */
 STATUS logoff_user(int sfd) {
-  return OK;
+  struct connection *iterator;
+
+  for (iterator = connections->next; iterator != connections; iterator = iterator->next) {
+    if (iterator->sfd == sfd) {
+      iterator->prev->next = iterator->next;
+      iterator->next->prev = iterator->prev;
+      free(iterator);
+      return OK;
+    }
+  }
+
+  return ERROR_USER_NOT_FOUND;
 }
 
 void logs(const char *str) {
@@ -139,20 +162,23 @@ void *manager(void *arg) {
             struct message ret;
             struct connection *conn;
 
-            memset(&ret, 0, sizeof ret);
-            strcpy(ret.from, "SERVER");
-            timestampmessage(&ret);
             conn = malloc(sizeof(struct connection));
-
             if (!conn) {
               fprintf(stderr, "Could not allocate memory for user connection\n");
               /* XXX disconnect all users here */
               _Exit(EXIT_FAILURE);
             }
 
+            memset(conn, 0, sizeof(*conn));
+            memset(&ret, 0, sizeof ret);
+            strcpy(ret.from, "SERVER");
+            timestampmessage(&ret);
+
             conn->sfd = listener[i].fd;
+            conn->next = conn->prev = conn;
             strcpy(conn->uinfo.handle, m.from);
-            STATUS s = register_user(&conn->uinfo);
+            printf("sfd given to lu: %d\n", conn->sfd);
+            STATUS s = login_user(conn);
             if (s == ERROR_USERNAME_IN_USE) {
               sprintf(ret.txt, "A user with the name %s already exists", conn->uinfo.handle);
               ret.flags = ECONNDROPPED;
@@ -160,20 +186,22 @@ void *manager(void *arg) {
               /*
                * TODO when we organize user info later, we will be able to cleanly
                * ask the client for a new username, instead of forcing them to reconnect.
-               * However for now this suffices.
+               * but this works for now
                */
-              disconnect_wrapper(listener[i].fd);
+              logoff_user(listener[i].fd);
               continue;
             }
           }
 
-          /* Disconnect a user */
+          /* 
+           * TODO fix this
+           * Disconnect a user */
           if (strcmp(m.txt, "/exit") == 0) {
-            close(listener[i].fd);
-            listener[i].fd = -1; // remove from poll() query 
+            logoff_user(listener[i].fd);
+            listener[i].fd = -1; // remove from poll() query
             sprintf(logbuff, "user %s disconnected", m.from);
             logs(logbuff);
-            m.flags = FDISCONNECT;
+            disconnect_wrapper(listener[i].fd);
           }
           broadcastmsg(&m);
           memset(buff, 0, sizeof buff);
@@ -212,10 +240,6 @@ int main(int argc, char **argv) {
   if (res != 0) {
     perror("sigaction:");
   }
-
-  connections = malloc(sizeof(*connections));
-  connections->uinfo.uid = -1;
-  connections->next = connections->prev = connections;
 
   sprintf(logbuff, "Creating server on port %s", PORT); // XXX logs var args
   logs(logbuff);
@@ -287,7 +311,7 @@ int main(int argc, char **argv) {
       perror("accept");
       continue;
     }
-    /* TODO 
+    /* TODO bug 1
      * require a connected client to immediately login (give user info for now)
      * or be disconnected. Because the server could be put into a state of indefinitely
      * waiting for a single client before handling new ones, it might be better to send
@@ -299,5 +323,9 @@ int main(int argc, char **argv) {
     listener[numconns].events = POLLIN;
     numconns++;
   }
+
+  logs("Disconnecting all users...");
+  freeconnections(connections);
+  logs("Done.");
   exit(EXIT_SUCCESS);
 }
