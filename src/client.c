@@ -28,21 +28,7 @@ void sa_handle(int signal, siginfo_t *info, void *ucontext) {
     connected = 0;
 }
 
-// XXX
-/*
-STATUS login(struct connection *conn) {
-  struct message request;
-  memset(&request, 0, sizeof request);
-  printf("handle:");
-  fgets(conn->uinfo.handle, HANDLE_LEN + 1, stdin);
-  strcpy(request.from, conn->uinfo.handle);
-  request.uid = request.id = -1;
-  timestampmessage(&request);
-  request.flags = FCONNECT;
-  sendmessage(conn->sfd, &request);
-  return OK;
-}
-*/
+// XXX status login(struct connection *conn) {}
 
 int main(int argc, char **argv) {
   int sockfd;
@@ -52,7 +38,8 @@ int main(int argc, char **argv) {
   char *hostname = LOCALHOST;
   struct sigaction s_act, s_oldact;
   int res;
-
+  pthread_t sendertid;
+  pthread_t receivertid;
   struct connection conn;
 
   if (argc > 1) {
@@ -109,9 +96,6 @@ int main(int argc, char **argv) {
   /* Tell the server who we are */
   printf("handle:");
   fgets(conn.uinfo.handle, HANDLE_LEN + 1, stdin);
-
-  pthread_t sendertid;
-  pthread_t receivertid;
 
   if (pthread_create(&sendertid, NULL, thread_send, &conn)) {
     fprintf(stderr, "Could not create msg sender thread\n");

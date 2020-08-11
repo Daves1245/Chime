@@ -22,7 +22,6 @@
  * - more user commands
  ***********/
 
-// it's in another file!
 void debugmessage(const struct message *m) {
   printf("---MESSAGE---\n");
   printf("[id]: `%d`\n", m->id);
@@ -48,6 +47,20 @@ STATUS timestampmessage(struct message *msg) {
 
 STATUS packmessage(struct message *msg) {
   fgets(msg->txt, MAX_TEXT_LEN + 1, stdin);
+  /*
+   * TODO ideally you send an empty string
+   * but since we currently parse messages
+   * with newline delimiters and strtok(),
+   * if a packed message contains an empty
+   * txt field, then two adjacent newlines
+   * form a single delimiter for strtok(),
+   * and the last field,flags, is not read
+   * properly. So we place a space for now
+   * with the intent of changing it later.
+   */
+  if (*msg->txt == '\n') {
+    strcpy(msg->txt, " ");
+  }
   if (msg->txt[0] == '/') {
     cmdparse(msg);
   }
@@ -60,3 +73,4 @@ STATUS makemessage(const struct user *usr, struct message *msg) {
   strcpy(msg->from, usr->handle);
   return 0;
 }
+

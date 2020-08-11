@@ -26,27 +26,32 @@
 #define UPTIME_STR_LEN 10
 #define LOGBUFF_STR_LEN 100
 
-volatile sig_atomic_t running = 1;
-
-void sa_handle(int signal, siginfo_t *info, void *ucontext) {
-  running = 0;
-}
+FILE *outputstream;
 
 void broadcastmsg(struct message *m);           /* Broadcast msg to all users */
 void broadcast(const char *msg, size_t msglen); /* To be deprecated */
 void *manager(void *arg);                       /* Manager thread for connections */
 
-struct pollfd listener[BACKLOG]; // connections
-int numconns;
+/* Main loop variable */
+volatile sig_atomic_t running = 1;
 
-/* TODO Non invasive linked list */
-struct list_head {
-  struct list_head *prev, *next;
-};
-
+/* Pointer to linked list of currently connected users */
 struct connection *connections;
+/* The uid to assign to the next connected user */
 int next_uid;
 
+/* Array of pollfd structures used to find out if a user has sent a message
+ * or is ready to receive a message */
+struct pollfd listener[BACKLOG];
+/* The number of currently connected users */
+int numconns;
+
+/* Signal handler to gracefully exit on SIGINT or SIGTERM */
+void sa_handle(int signal, siginfo_t *info, void *ucontext) {
+  running = 0;
+}
+
+/* TODO Non invasive linked list or array */
 void freeconnections(struct connection *c) {
   struct connection *iterator;
   for (iterator = connections; iterator->next != connections; iterator = iterator->next) {
@@ -62,7 +67,6 @@ void freeconnections(struct connection *c) {
  * and if so, login the new user.
  */
 STATUS login_user(struct connection *entry) {
-  printf("logging user with sfd %d\n", entry->sfd);
   struct connection *iterator;
   if (!connections) {
     connections = entry;
@@ -98,7 +102,6 @@ STATUS login_user(struct connection *entry) {
  */
 STATUS logoff_user(int sfd) {
   struct connection *iterator;
-
   for (iterator = connections->next; iterator != connections; iterator = iterator->next) {
     if (iterator->sfd == sfd) {
       iterator->prev->next = iterator->next;
@@ -107,16 +110,22 @@ STATUS logoff_user(int sfd) {
       return OK;
     }
   }
-
   return ERROR_USER_NOT_FOUND;
 }
 
+/*
+ * name: logs
+ * params: string str
+ *
+ * log a message to the output stream
+ * (stdout by default)
+ */
 void logs(const char *str) {
   time_t rtime;
   struct tm *now;
   time(&rtime);
   now = localtime(&rtime);
-  printf(CYAN "[%d:%d]: " ANSI_RESET "%s\n", now->tm_hour, now->tm_min, str);
+  fprintf(outputstream, CYAN "[%d:%02d]: " ANSI_RESET "%s\n", now->tm_hour, now->tm_min, str);
 }
 
 /* Broadcast a message to all users */
@@ -177,7 +186,6 @@ void *manager(void *arg) {
             conn->sfd = listener[i].fd;
             conn->next = conn->prev = conn;
             strcpy(conn->uinfo.handle, m.from);
-            printf("sfd given to lu: %d\n", conn->sfd);
             STATUS s = login_user(conn);
             if (s == ERROR_USERNAME_IN_USE) {
               sprintf(ret.txt, "A user with the name %s already exists", conn->uinfo.handle);
@@ -188,7 +196,11 @@ void *manager(void *arg) {
                * ask the client for a new username, instead of forcing them to reconnect.
                * but this works for now
                */
-              logoff_user(listener[i].fd);
+              // hint that logoff_user will return more than two states later
+              STATUS s = logoff_user(listener[i].fd);
+              if (s == ERROR_USER_NOT_FOUND) {
+                logs("ERR USER NOT FOUND. This should not display. If you see this please post to https://www.github.com/Daves1245/Chime/issues");
+              }
               continue;
             }
           }
@@ -240,6 +252,8 @@ int main(int argc, char **argv) {
   if (res != 0) {
     perror("sigaction:");
   }
+
+  outputstream = stdout;
 
   sprintf(logbuff, "Creating server on port %s", PORT); // XXX logs var args
   logs(logbuff);
@@ -305,7 +319,7 @@ int main(int argc, char **argv) {
 
     if (new_fd == -1) {
       if (errno == EINTR) {
-        logs("Exiting.");
+        logs("Shutting down.");
         break; /* Running should be set to 0 */
       }
       perror("accept");

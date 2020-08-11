@@ -54,10 +54,11 @@ STATUS uploadfile(struct connection *conn, int fd) {
 void *thread_recv(void *pconn) {
   struct connection *conn = (struct connection *) pconn;
   struct message msg;
+  STATUS s;
   memset(&msg, 0, sizeof msg);
 
   while (connected) {
-    STATUS s = recvmessage(conn->sfd, &msg);
+    s = recvmessage(conn->sfd, &msg);
 #ifdef DEBUG
     debugmessage(&msg);
 #endif
@@ -94,7 +95,10 @@ void *thread_send(void *pconn) {
   // pack msg with user info and send to server
   memset(&msg, 0, sizeof msg);
   makemessage(&conn->uinfo, &msg);
+  strcpy(msg.txt, " "); // TODO fix the 'empty text field' bug
+  msg.flags = FCONNECT;
   sendmessage(conn->sfd, &msg);
+  msg.flags = FMSG;
 
   struct pollfd listener;
   listener.fd = 0; // poll for stdin
@@ -105,12 +109,20 @@ void *thread_send(void *pconn) {
       /* XXX Grab input, check for exit */
       packmessage(&msg);
       msg.id++;
-      if (strcmp(msg.txt, "/exit\n") == 0) { // fgets stores \n in buff
+      /*if (strcmp(msg.txt, "/exit\n") == 0) { // fgets stores \n in buff
+        connected = 0;
+        }*/
+      if (msg.flags == FDISCONNECT) {
+        printf("connected flag set, should be disconnecting now\n");
         connected = 0;
       }
-      sendmessage(conn->sfd, &msg);
+      STATUS s = sendmessage(conn->sfd, &msg);
+      if (s != OK) {
+        connected = 0;
+      }
     }
   }
   disconnect_wrapper_and_exit(conn->sfd);
   return NULL;
 }
+
