@@ -12,6 +12,8 @@
 #include <signal.h>
 #include <pthread.h>
 #include <poll.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "colors.h"
 #include "common.h"
@@ -22,9 +24,17 @@
 
 #define PORT "33401"
 #define BACKLOG 10
+#define FILEBUFF_LEN 1000 // TODO find optimization for this
+#define FILENAME_LEN 100
 
 #define UPTIME_STR_LEN 10
 #define LOGBUFF_STR_LEN 100
+
+/* Each file sent is prepended by this so that the recipient knows what to expect */
+struct fileheader {
+  char filename[FILENAME_LEN + 1];
+  size_t size;
+};
 
 FILE *outputstream;
 
@@ -156,6 +166,111 @@ void broadcastmsg(struct message *m) {
     }
   }
 }
+
+/* PSEUDO PROTOTYPE FILE MANAGING */
+
+int min(int a, int b) {
+  return a < b ? a : b;
+}
+
+void *uploadmanager(int outfd, struct connection *conn, struct fileheader *filei) {
+  char buff[FILEBUFF_LEN];
+  size_t received = 0, written = 0, tmp, bufflen;
+
+  while (received < filei->size) {
+    tmp = recv(conn->sfd, buff, min(sizeof(buff), filei->size - received), 0);
+    if (tmp < 0) {
+      perror("[uploadmanager] recv:");
+      return NULL; // TODO
+    }
+    if (tmp == 0) {
+      logs(YELLOW "[uploadmanager]:" RED " Connection to client dropped before file could be transferred.\n" ANSI_RESET);
+      return NULL; // XXX return ERR_LOST_CONN
+    }
+
+    received += tmp;
+    bufflen = tmp;
+
+    while (written < bufflen) {
+      tmp = write(outfd, buff + written, sizeof(buff) - written);
+      if (tmp < 0) {
+        if (errno == EINTR) {
+          continue; // try again
+        }
+      }
+      if (tmp == 0) {
+        fprintf(stderr, "[uploadmanager]: write returned 0\n");
+        perror("write");
+        return NULL; // XXX return ERR_FAILED_SYS
+      }
+      written += tmp;
+    }
+  }
+  return NULL; // TODO
+}
+
+STATUS parsefileheader(const struct connection *conn, struct fileheader *dest) {
+  int outfd, parsed = 0;
+  //struct fileheader header;
+  // TODO recv filehader, parse filename and info
+start:
+  if ((outfd = open(dest->filename, O_CREAT | O_WRONLY, 0666)) == -1) {
+    if (errno == EINTR) {
+      goto start; // try again
+    }
+    perror("open");
+    return ERROR_FAILED_SYSCALL;
+  }
+  while (!parsed);
+  return OK;
+}
+
+STATUS filemanager(struct connection *conn, struct fileheader *fi) {
+  char buff[FILEBUFF_LEN];
+  //if (upload) {
+    int outfd, received, written, temp;
+start:
+    if ((outfd = open(fi->filename, O_CREAT | O_WRONLY, 0666)) == -1) {
+      if (errno == EINTR) {
+        goto start;      
+      }
+      perror("open");
+      return ERROR_FAILED_SYSCALL;
+   // }
+
+    while (received < fi->size) {
+      memset(buff, 0, sizeof buff);
+      temp = recv(conn->sfd, buff, sizeof(buff), 0);
+      if (temp == 0) {
+        logs("Could not receive file: connection closed");
+        return ERROR_CONNECTION_DROPPED;
+      }
+      if (temp < 0) {
+        perror("recv");
+        exit(EXIT_FAILURE); // TODO research: is this fatal? should it stop the program?
+      }
+      received += temp;
+      int bufflen = temp;
+      while (written < bufflen) {
+        temp = write(outfd, buff + written, bufflen - written);
+        if (temp == 0) {
+
+        }
+      }
+    }
+  }
+  return OK;
+}
+
+/*
+if (typeof connection[i].nextMessage() == FILE_UPLOAD) {
+  if (pthread_start(filemanager, fileinfo) != OK) {
+    err("Could not start thread for file upload\n");
+  }
+}
+*/
+
+/* PSEUDO PROTOTYPE FILE MANAGING */
 
 void *manager(void *arg) {
   char buff[MAX_RECV_LEN + 1];
