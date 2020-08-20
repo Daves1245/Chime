@@ -86,6 +86,8 @@ STATUS login_user(struct connection *entry) {
     return entry->uinfo.uid = next_uid++;
   }
   for (iterator = connections; iterator->next != connections; iterator = iterator->next) {
+    printf("handle: %s\n", iterator->uinfo.handle);
+    // TODO if (iterator->uinfo.uid == entry->uinfo.uid) {return ERROR_ALREADY_CONNECTED;}
     if (strcmp(iterator->uinfo.handle, entry->uinfo.handle) == 0) {
       return ERROR_USERNAME_IN_USE;
     }
@@ -130,6 +132,7 @@ STATUS logoff_user(int sfd) {
       free(iterator);
       return OK;
     }
+    iterator = iterator->next;
   }
   return ERROR_USER_NOT_FOUND;
 }
