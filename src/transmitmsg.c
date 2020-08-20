@@ -57,7 +57,7 @@ STATUS cmdparse(struct message *msg) {
       }
     }
   } else { // commands without arguments
-    if (strcmp(msg->txt + 1, "exit") == 0) {
+    if (strcmp(msg->txt + 1, "exit\n") == 0) {
       msg->flags = FDISCONNECT;
     }
   }

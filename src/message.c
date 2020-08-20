@@ -84,7 +84,7 @@ STATUS packmessage(struct message *msg) {
   if (*msg->txt == '\n') {
     strcpy(msg->txt, " ");
   }
-  if (msg->txt[0] == '/') {
+  if (*msg->txt == '/') {
     cmdparse(msg);
   }
   timestampmessage(msg);

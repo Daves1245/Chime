@@ -133,7 +133,6 @@ void *thread_send(void *pconn) {
         connected = 0;
         }*/
       if (msg.flags == FDISCONNECT) {
-        printf("connected flag set, should be disconnecting now\n");
         connected = 0;
       }
       STATUS s = sendmessage(conn->sfd, &msg);
