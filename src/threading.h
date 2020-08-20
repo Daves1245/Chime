@@ -8,9 +8,9 @@
 
 #include "colors.h"
 #include "defs.h"
-
 #include "connection.h"
 #include "transmitmsg.h"
+#include "signaling.h"
 
 /***********
  * XXX
@@ -21,7 +21,6 @@
  * - more user commands
  ***********/
 
-volatile sig_atomic_t connected = 1;
 
 void disconnect();                                  /* Terminate the current connection */
 void getinput(char *dest, size_t *res, size_t len); /* store line of text at most len into dest and modify *res accordingly */
@@ -29,6 +28,13 @@ void *thread_recv(void *);                          /* Message receiving thread 
 void *thread_send(void *);                          /* Message sending thread */
 void *connection_handler(void *);                   /* Connection handling thread */
 
+/*
+ * name: uploadfile
+ * params: connection pointer conn, file descriptor fd
+ *
+ * Send a file through the connection
+ * Return value: OK on success. If 
+ */
 STATUS uploadfile(struct connection *conn, int fd) {
   struct stat st;
   int s = fstat(fd, &st);
@@ -50,7 +56,13 @@ STATUS uploadfile(struct connection *conn, int fd) {
  * - 
  */
 
-// XXX
+/*
+ * name: thread_recv
+ * params: generic pointer to connection.
+ *
+ * The main receiving thread for the client.
+ * Return value: (unused)
+ */
 void *thread_recv(void *pconn) {
   struct connection *conn = (struct connection *) pconn;
   struct message msg;
@@ -88,6 +100,14 @@ void *thread_recv(void *pconn) {
   return NULL;
 }
 
+/*
+ * name: thread_send
+ * params: generic pointer to connection
+ *
+ * The main send thread for clients. Handles
+ * packing a message with user and text info,
+ * and then sends the packed message to the server
+ */
 void *thread_send(void *pconn) {
   struct connection *conn = (struct connection *) pconn;
   struct message msg;

@@ -1,6 +1,15 @@
 #ifndef STATUS_H
 #define STATUS_H
 
+/*
+ * enum chime_status - Describe the return
+ * status of a function.
+ *
+ * A collection of constants used to describe
+ * the return status of any function that can
+ * exit successfully or error. This is used
+ * throughout the entire project.
+ */
 enum chime_status {
   OK,
   ERROR_USER_NOT_FOUND,

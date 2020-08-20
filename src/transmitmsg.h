@@ -3,6 +3,7 @@
 
 #include <inttypes.h>
 #include <time.h>
+#include <errno.h>
 
 #include "user.h"
 #include "status.h"

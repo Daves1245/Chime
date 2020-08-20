@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <string.h>
+#include <signal.h>
 
 #include "defs.h"
 #include "colors.h"
@@ -14,6 +15,9 @@
 #include "transmitmsg.h"
 #include "connection.h"
 
+// TODO resolve translation unit organiztion (multiple definitions of joseph)
+extern volatile sig_atomic_t connected;
+
 /***********
  * XXX
  * - user profiles 
@@ -23,9 +27,16 @@
  * - more user commands
  ***********/
 
-// it's in another file!
+// hint - it's in another file!
 extern STATUS uploadfile(struct connection *conn, int fd);
 
+/*
+ * name: cmdparse
+ * params: message pointer msg
+ *
+ * Performs the necessary action that
+ * the command in msg specifies
+ */
 STATUS cmdparse(struct message *msg) {
   char *cmd, buff[MAX_TEXT_LEN + 1];
   strcpy(buff, msg->txt + 1);
@@ -53,7 +64,49 @@ STATUS cmdparse(struct message *msg) {
   return OK;
 }
 
+/*
+ * receive_wrapper() - wrapper for grabbing fields in recvmessage
+ * @sfd: the socket file descriptor of the connected user
+ * @buff: the buffer to recv into
+ * @size: the size of the buffer to recv into
+ * @field: pointer to string that stores the next field of the message
+ *
+ * A wrapper for recvmessage to clean up grabbing each field for recvmessage
+ * 
+ * Return: bytes read by recv
+ */
+size_t receive_wrapper(int sfd, void *buff, size_t size, char **field) {
+  char *tmp = NULL;
+  size_t len = 0;
+  while (!tmp) {
+    len = recv(sfd, buff, size, 0);
+    if (len < 0) {
+      if (errno == EINTR) {
+        continue; // interrupted syscall, try again
+      }
+      perror("recv");
+      exit(EXIT_FAILURE); // TODO should this be fatal?
+    }
+    if (len == 0) {
+      fprintf(stderr, "Connection has closed. Cannot receive message\n");
+      connected = 0;
+      return 0;
+    }
+  }
+
+  return len;
+}
+
 // TODO fix
+/*
+ * name: recvmessage
+ * params: socket file descriptor sfd, message pointer msg
+ *
+ * Receive a message from the socket referenced by sfd and
+ * store it in msg
+ *
+ * Return: OK on success.
+ */
 STATUS recvmessage(int sfd, struct message *msg) {
   char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 4] = { 0 };
   size_t bread;
@@ -113,21 +166,38 @@ STATUS recvmessage(int sfd, struct message *msg) {
   return OK;
 }
 
-/* Unpack struct, send each field as char stream */
+/*
+ * sendmessage() - send a message to a client
+ * @sfd: the socket file descriptor to which to send the message
+ * @msg: the message to be sent
+ *
+ * sendmessage unpacks msg into a statically allocated character buffer
+ * and then sends the message in plaintext (TODO) to the client. This is 
+ * done for portability and to keep things simple.
+ *
+ * Return: 
+ * * OK - success
+ * * ERROR_CONNECTION_DROPPED - sfd has closed, and a message can no longer be sent.
+ *                              the client should be logged out and removed from the 
+ *                              poll query.
+ */
 STATUS sendmessage(int sfd, const struct message *msg) {
   /* One buffer large enough to store each field - and their respective null byte */
   char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + HANDLE_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 5];
   memset(buff, 0, sizeof buff);
   sprintf(buff, "%d\n%d\n%s\n%s\n%d\n%c", msg->id, msg->uid, msg->from, msg->txt, msg->flags, '\0');
   size_t sent = 0, tosend = strlen(buff);
-  while ((sent = send(sfd, buff, tosend - sent, 0)) != tosend) {
-    if (sent < 0) {
+  size_t tmp;
+  while (sent < tosend) {
+    tmp = send(sfd, buff, strlen(buff) + 1 - sent, 0);
+    if (tmp < 0) {
       perror("send");
       exit(EXIT_FAILURE);
-    } else if (sent == 0) {
+    } else if (tmp == 0) {
       fprintf(stderr, "Connection has closed. Cannot sent message. Exiting now...\n");
-      exit(EXIT_FAILURE);
+      return ERROR_CONNECTION_DROPPED;
     }
+    sent += tmp;
   }
   return 0;
 }

@@ -1,7 +1,7 @@
 #include "user.h"
 
 struct user {
-  uint16_t uid;
+  int uid;
   char handle[HANDLE_LEN + 1];
-  // XXX friends
+  // TODO friends
 };

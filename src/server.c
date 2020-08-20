@@ -21,11 +21,13 @@
 #include "defs.h"
 #include "connection.h"
 #include "transmitmsg.h"
+#include "signaling.h"
 
 #define PORT "33401"
 #define BACKLOG 10
 #define FILEBUFF_LEN 1000 // TODO find optimization for this
 #define FILENAME_LEN 100
+#define MODE 0666 // TODO mv to defs
 
 #define UPTIME_STR_LEN 10
 #define LOGBUFF_STR_LEN 100
@@ -108,12 +110,21 @@ STATUS login_user(struct connection *entry) {
  * params: int sfd
  *
  * remove a user from the current list of 
- * active connections
+ * active connections.
+ * 
+ * Return value: ERROR_USER_NOT_FOUND if
+ * the requested user could not be found,
+ * OK on success.
  */
 STATUS logoff_user(int sfd) {
-  struct connection *iterator;
-  for (iterator = connections->next; iterator != connections; iterator = iterator->next) {
+  struct connection *iterator = connections;
+  int flag = 0;
+  while (!flag || iterator != connections) {
+    flag |= iterator == connections;
     if (iterator->sfd == sfd) {
+      if (flag) {
+        connections = connections->next;
+      }
       iterator->prev->next = iterator->next;
       iterator->next->prev = iterator->prev;
       free(iterator);
@@ -125,9 +136,9 @@ STATUS logoff_user(int sfd) {
 
 /*
  * name: logs
- * params: string str
+ * params: string
  *
- * log a message to the output stream
+ * Log a message to the output stream
  * (stdout by default)
  */
 void logs(const char *str) {
@@ -138,7 +149,12 @@ void logs(const char *str) {
   fprintf(outputstream, CYAN "[%d:%02d]: " ANSI_RESET "%s\n", now->tm_hour, now->tm_min, str);
 }
 
-/* Broadcast a message to all users */
+/*
+ * name: broadcast
+ * params: string msg, size msglen
+ *
+ * (DEPRECATED) broadcast a string to all users
+ */
 void broadcast(const char *msg, size_t msglen) {
   size_t numbytes;
   for (int i = 0; i < numconns; i++) {
@@ -156,6 +172,12 @@ void broadcast(const char *msg, size_t msglen) {
   }
 }
 
+/*
+ * name: broadcastmsg
+ * params: struct message pointer
+ *
+ * Broadcast a message to all clients currently connected
+ */
 void broadcastmsg(struct message *m) {
   char logbuff[LOGBUFF_STR_LEN + MAX_TEXT_LEN];
   sprintf(logbuff, BLUE "BROADCAST (" ANSI_RESET GREEN "%s" ANSI_RESET BLUE "): " ANSI_RESET "%s", m->from, m->txt);
@@ -173,6 +195,14 @@ int min(int a, int b) {
   return a < b ? a : b;
 }
 
+/*
+ * name: uploadmanager
+ * params: file descriptor outfd, connection pointer conn, fileheader pointer filei
+ *
+ * This thread sends a file to the client associated with conn
+ *
+ * Return type: TBD
+ */
 void *uploadmanager(int outfd, struct connection *conn, struct fileheader *filei) {
   char buff[FILEBUFF_LEN];
   size_t received = 0, written = 0, tmp, bufflen;
@@ -201,7 +231,7 @@ void *uploadmanager(int outfd, struct connection *conn, struct fileheader *filei
       if (tmp == 0) {
         fprintf(stderr, "[uploadmanager]: write returned 0\n");
         perror("write");
-        return NULL; // XXX return ERR_FAILED_SYS
+        return NULL; // TODO return ERR_FAILED_SYS
       }
       written += tmp;
     }
@@ -209,22 +239,39 @@ void *uploadmanager(int outfd, struct connection *conn, struct fileheader *filei
   return NULL; // TODO
 }
 
+/*
+ * name: parsefileheader
+ * params: connection pointer conn, filehader pointer dest
+ *
+ * Fills the dest pointer with the necessary information grabbed
+ * from conn after an FUPLOAD request
+ *
+ * Return value: OK on success. If any of the system calls open,
+ * recv fail, then ERROR_FAILED_SYSCALL is returned.
+ */
 STATUS parsefileheader(const struct connection *conn, struct fileheader *dest) {
   int outfd, parsed = 0;
   //struct fileheader header;
   // TODO recv filehader, parse filename and info
-start:
-  if ((outfd = open(dest->filename, O_CREAT | O_WRONLY, 0666)) == -1) {
+
+  while ((outfd = open(dest->filename, O_CREAT | O_WRONLY, MODE)) == -1) {
     if (errno == EINTR) {
-      goto start; // try again
+      continue;
     }
-    perror("open");
     return ERROR_FAILED_SYSCALL;
   }
-  while (!parsed);
+  while (!parsed) {
+    parsed = 1; // XXX finish
+  }
   return OK;
 }
 
+/*
+ * name: filemanager
+ * params: connection pointer conn, fileheader pointer fi
+ *
+ * 
+ */
 STATUS filemanager(struct connection *conn, struct fileheader *fi) {
   char buff[FILEBUFF_LEN];
   //if (upload) {
@@ -253,8 +300,13 @@ start:
       int bufflen = temp;
       while (written < bufflen) {
         temp = write(outfd, buff + written, bufflen - written);
+        if (temp < 0) {
+          perror("write");
+          exit(EXIT_FAILURE);
+        }
         if (temp == 0) {
-
+          fprintf(stderr, "write wrote 0\n");
+          return ERROR_FAILED_SYSCALL;
         }
       }
     }
@@ -262,16 +314,18 @@ start:
   return OK;
 }
 
-/*
-if (typeof connection[i].nextMessage() == FILE_UPLOAD) {
-  if (pthread_start(filemanager, fileinfo) != OK) {
-    err("Could not start thread for file upload\n");
-  }
-}
-*/
-
 /* PSEUDO PROTOTYPE FILE MANAGING */
 
+/*
+ * name: manager TODO
+ * params: arg (not used)
+ *
+ * Manages reading and sending messages sent by clients.
+ * Any unread messages are read, interpreted, and their associated
+ * action performed (normally broadcasting it to the other users).
+ *
+ * Return value: (not used) TODO
+ */
 void *manager(void *arg) {
   char buff[MAX_RECV_LEN + 1];
   struct message m;
@@ -341,6 +395,13 @@ void *manager(void *arg) {
   return NULL;
 }
 
+/*
+ * name: main
+ * 
+ * Setup the server on the requested address,
+ * and start the management threads. Gracefully
+ * exit when finished.
+ */
 int main(int argc, char **argv) {
   int sockfd, new_fd; // listen on sock_fd, new connections on new
   struct addrinfo hints, *servinfo, *p;
@@ -458,3 +519,4 @@ int main(int argc, char **argv) {
   logs("Done.");
   exit(EXIT_SUCCESS);
 }
+

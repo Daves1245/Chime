@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <poll.h>
 
+#include "signaling.h"
 #include "common.h"
 #include "message.h"
 #include "colors.h"
@@ -23,15 +24,28 @@
 #define PORT "33401"
 #define MAXDATASIZE 100
 
-// TODO standard signal error handling
+/*
+ * sa_handle() - Catch SIGINT and SIGTERM and disconnect from
+ * the server
+ *
+ * The signal handler simply sets the connected
+ * flag to false.
+ */
 void sa_handle(int signal, siginfo_t *info, void *ucontext) {
     connected = 0;
 }
 
 // XXX status login(struct connection *conn) {}
 
+/*
+ * name: main
+ *
+ * Connect to the server and talk. Disconnect
+ * gracefully on exit.
+ */
 int main(int argc, char **argv) {
   int sockfd;
+  char *port;
   struct addrinfo hints, *servinfo, *p;
   int rv;
   char serverip[INET6_ADDRSTRLEN];
@@ -42,15 +56,21 @@ int main(int argc, char **argv) {
   pthread_t receivertid;
   struct connection conn;
 
+  port = PORT;
+
   if (argc > 1) {
       hostname = argv[1];
+  }
+
+  if (argc > 2) {
+    port = argv[2];
   }
 
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_STREAM;
 
-  if ((rv = getaddrinfo(hostname, PORT, &hints, &servinfo)) != 0) {
+  if ((rv = getaddrinfo(hostname, port, &hints, &servinfo)) != 0) {
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
     return 1;
   }

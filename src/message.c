@@ -32,19 +32,42 @@ void debugmessage(const struct message *m) {
   printf("[flags]:`%d`\n", m->flags);
 }
 
+/*
+ * showmessage() - display a message to stdout
+ * @msg: the message to display
+ *
+ * TODO account for terminals without color escape codes
+ */
 void showmessage(const struct message *msg) {
   printf(CYAN "[%s]" ANSI_RESET ":%s\n", msg->from, msg->txt);
 }
 
+/*
+ * timestampmessage() - store the current timestamp
+ * in a message
+ *
+ * Return: OK on success
+ */
 STATUS timestampmessage(struct message *msg) {
   time_t rtime;
   struct tm *now;
   time(&rtime);
   now = localtime(&rtime);
   sprintf(msg->timestmp, "[%d:%2d]", now->tm_hour, now->tm_min);
-  return 0;
+  return OK;
 }
 
+/*
+ * packmessage() - pack a message with the
+ * necessary information.
+ * @msg: the message to pack
+ *
+ * Given a message msg, packmessage fills 
+ * the text, flags, and timestamp fields
+ * within it.
+ *
+ * Return: OK on success
+ */
 STATUS packmessage(struct message *msg) {
   fgets(msg->txt, MAX_TEXT_LEN + 1, stdin);
   /*
@@ -65,12 +88,26 @@ STATUS packmessage(struct message *msg) {
     cmdparse(msg);
   }
   timestampmessage(msg);
-  return 0;
+  return OK;
 }
 
+/*
+ * makemessage() - make a message
+ * @usr: user info to store into msg
+ *
+ *    Given a message and static information to pack it with,
+ * makemessage fills in the fields of msg that are static.
+ * As in, the difference between makemessage and packmessage
+ * is that the fields in packmessage are volatile and will
+ * be overwritten on the next message sent, while those 
+ * written in makemessage are supposed to stay static throughout
+ * the entire session. This includes the user id and handle.
+ *
+ * Return: OK on success
+ */
 STATUS makemessage(const struct user *usr, struct message *msg) {
   msg->uid = usr->uid;
   strcpy(msg->from, usr->handle);
-  return 0;
+  return OK;
 }
 

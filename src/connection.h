@@ -7,6 +7,13 @@
 #include "status.h"
 #include "types.h"
 
+/*
+ * struct connection - represent a connection associated with a client
+ * @uinfo: user info of the client associated with this connection
+ * @next: pointer to next connection entry in linked list
+ * @prev: pointer to previous connection entry in linked list
+ * TODO - remove linked list
+ */
 struct connection {
     int sfd;                        /* Socket that user is connected on */
     struct user uinfo;              /* Info about user */
