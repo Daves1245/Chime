@@ -1,11 +1,9 @@
 #ifndef COLORS_H
 #define COLORS_H
 
-/* ansi-colours.h */
-
-#pragma once
-
-/* EXAMPLE:
+/* colors.h 
+ *
+ * EXAMPLE:
  *      RED("this text will be red")
  */
 
@@ -24,5 +22,9 @@
 #define ANSI_BLUE(text)           ("\x1b[34m" text ANSI_RESET)
 #define ANSI_MAGENTA(text)        ("\x1b[35m" text ANSI_RESET)
 #define ANSI_CYAN(text)           ("\x1b[36m" text ANSI_RESET)
+
+#define CHIME_INFO GREEN
+#define CHIME_WARN YELLOW
+#define CHIME_FATAL RED
 
 #endif
