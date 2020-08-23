@@ -22,6 +22,7 @@
 #include "connection.h"
 #include "transmitmsg.h"
 #include "signaling.h"
+#include "logging.h"
 
 #define PORT "33401"
 #define BACKLOG 10
@@ -66,10 +67,12 @@ void sa_handle(int signal, siginfo_t *info, void *ucontext) {
 /* TODO Non invasive linked list or array */
 void freeconnections(struct connection *c) {
   struct connection *iterator;
-  for (iterator = connections; iterator->next != connections; iterator = iterator->next) {
+  for (iterator = connections; iterator && iterator->next != connections; iterator = iterator->next) {
     disconnect(iterator);
   }
+  if (iterator) {
     disconnect(iterator);
+  }
 }
 /*
  * name: login_user 
@@ -135,21 +138,6 @@ STATUS logoff_user(int sfd) {
     iterator = iterator->next;
   }
   return ERROR_USER_NOT_FOUND;
-}
-
-/*
- * name: logs
- * params: string
- *
- * Log a message to the output stream
- * (stdout by default)
- */
-void logs(const char *str) {
-  time_t rtime;
-  struct tm *now;
-  time(&rtime);
-  now = localtime(&rtime);
-  fprintf(outputstream, CYAN "[%d:%02d]: " ANSI_RESET "%s\n", now->tm_hour, now->tm_min, str);
 }
 
 /*
@@ -278,40 +266,39 @@ STATUS parsefileheader(const struct connection *conn, struct fileheader *dest) {
 STATUS filemanager(struct connection *conn, struct fileheader *fi) {
   char buff[FILEBUFF_LEN];
   //if (upload) {
-    int outfd, received, written, temp;
-start:
-    if ((outfd = open(fi->filename, O_CREAT | O_WRONLY, 0666)) == -1) {
-      if (errno == EINTR) {
-        goto start;      
-      }
+  int outfd, received = 0, written = 0, tmp;
+  while ((outfd = open(fi->filename, O_CREAT | O_WRONLY, MODE)) == -1) {
+    if (errno != EINTR) {
       perror("open");
-      return ERROR_FAILED_SYSCALL;
-   // }
+      exit(EXIT_FAILURE); // TODO fatal?
+    }
+  }
 
-    while (received < fi->size) {
-      memset(buff, 0, sizeof buff);
-      temp = recv(conn->sfd, buff, sizeof(buff), 0);
-      if (temp == 0) {
-        logs("Could not receive file: connection closed");
-        return ERROR_CONNECTION_DROPPED;
+  while (received < fi->size) {
+    int bufflen;
+    tmp = recv(conn->transferfd, buff + received, min(sizeof(buff) - received, fi->size - received), 0);
+    if (tmp < 0 && errno != EINTR) {
+      perror("recv");
+      exit(EXIT_FAILURE); // TODO fatal?
+    }
+
+    if (tmp == 0) {
+      // TODO keep file or trash it if unfinished? Keep in a cache and retry?
+      return ERROR_CONNECTION_CLOSED;
+    }
+
+    received += tmp;
+    bufflen = tmp;
+    while (written < bufflen) {
+      tmp = write(outfd, buff + written, bufflen - written);
+      if (tmp < 0 && errno != EINTR) {
+        perror("write");
+        exit(EXIT_FAILURE);
       }
-      if (temp < 0) {
-        perror("recv");
-        exit(EXIT_FAILURE); // TODO research: is this fatal? should it stop the program?
+      if (tmp == 0) {
+        return ERROR_CONNECTION_CLOSED;
       }
-      received += temp;
-      int bufflen = temp;
-      while (written < bufflen) {
-        temp = write(outfd, buff + written, bufflen - written);
-        if (temp < 0) {
-          perror("write");
-          exit(EXIT_FAILURE);
-        }
-        if (temp == 0) {
-          fprintf(stderr, "write wrote 0\n");
-          return ERROR_FAILED_SYSCALL;
-        }
-      }
+      written += tmp;
     }
   }
   return OK;
@@ -421,6 +408,8 @@ int main(int argc, char **argv) {
     port = argv[2];
   }
 
+  log_init();
+
   s_act.sa_sigaction = sa_handle;
   s_act.sa_flags = SA_SIGINFO;
   res = sigaction(SIGTERM, &s_act, &s_oldact);
@@ -517,6 +506,9 @@ int main(int argc, char **argv) {
     numconns++;
   }
 
+  /* Wait for managing thread to finish */
+  pthread_join(managert, NULL);
+  /* Disconnect and exit cleanly */
   logs("Disconnecting all users...");
   freeconnections(connections);
   logs("Done.");

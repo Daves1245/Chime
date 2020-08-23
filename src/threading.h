@@ -75,6 +75,7 @@ void *thread_recv(void *pconn) {
     debugmessage(&msg);
 #endif
     if (s == ERROR_CONNECTION_LOST) {
+      printf(YELLOW "Connection was closed by the server" ANSI_RESET "\n");
       // XXX give a 'server closed connection' return state to thread
       return NULL;
     }
@@ -89,7 +90,7 @@ void *thread_recv(void *pconn) {
         showmessage(&msg);
         break;
       case ECONNDROPPED:
-        printf(RED "%s" ANSI_RESET "\n", msg.txt);
+        printf(YELLOW "Connection was closed by the server" ANSI_RESET "\n");
         break;
       default:
         printf(RED "[invalid flags, defaulting to displaymsg]" ANSI_RESET "\n");
@@ -129,14 +130,8 @@ void *thread_send(void *pconn) {
       /* XXX Grab input, check for exit */
       packmessage(&msg);
       msg.id++;
-      /*if (strcmp(msg.txt, "/exit\n") == 0) { // fgets stores \n in buff
-        connected = 0;
-        }*/
-      if (msg.flags == FDISCONNECT) {
-        connected = 0;
-      }
       STATUS s = sendmessage(conn->sfd, &msg);
-      if (s != OK) {
+      if (s != OK || msg.flags == FDISCONNECT) {
         connected = 0;
       }
     }

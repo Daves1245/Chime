@@ -14,10 +14,12 @@ STATUS chime_connect(struct connection *conn) {
 }
 
 // TODO use the full extent of the connection wrapper
+// TODO make a disconnect user for server, disconnect for client
 void disconnect(struct connection *conn) {
   struct message fin;
   memset(&fin, 0, sizeof fin);
   strcpy(fin.txt, "/exit");
+  strcpy(fin.from, "server"); // TODO fix
   timestampmessage(&fin);
   fin.flags = FDISCONNECT;
   sendmessage(conn->sfd, &fin);

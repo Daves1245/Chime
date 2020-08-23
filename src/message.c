@@ -69,7 +69,10 @@ STATUS timestampmessage(struct message *msg) {
  * Return: OK on success
  */
 STATUS packmessage(struct message *msg) {
-  fgets(msg->txt, MAX_TEXT_LEN + 1, stdin);
+  char *txt = fgets(msg->txt, MAX_TEXT_LEN + 1, stdin);
+  if (!txt) {
+    strcpy(msg->txt, "/exit\n");
+  }
   /*
    * TODO ideally you send an empty string
    * but since we currently parse messages
