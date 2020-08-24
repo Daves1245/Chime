@@ -58,6 +58,11 @@ STATUS timestampmessage(struct message *msg) {
 }
 
 /*
+ * TODO the name packmessage should 
+ * really refer to the function that
+ * packs a message into a character array
+ * for sending over a socket.
+ *
  * packmessage() - pack a message with the
  * necessary information.
  * @msg: the message to pack

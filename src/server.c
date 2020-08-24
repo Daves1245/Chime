@@ -40,10 +40,20 @@ struct fileheader {
   size_t size;
 };
 
+struct p2p_request {
+  int requester_uid; /* user requesting to connect */
+  int requestee_uid; /* user being connected to */
+};
+
+struct p2p_info {
+  char server_host[INET6_ADDRSTRLEN], server_port[10];
+  char client_host[INET6_ADDRSTRLEN], client_port[10];
+};
+
 FILE *outputstream;
 
 int transfer_conns_arr[BACKLOG];
-int *transfer_conns = transfer_conns_arr;
+int *transfer_conns;
 int num_transfer_conns;
 
 void broadcastmsg(struct message *m);           /* Broadcast msg to all users */
@@ -211,10 +221,8 @@ void *uploadmanager(int outfd, struct connection *conn, struct fileheader *filei
       logs(YELLOW "[uploadmanager]:" RED " Connection to client dropped before file could be transferred.\n" ANSI_RESET);
       return NULL; // XXX return ERR_LOST_CONN
     }
-
     received += tmp;
     bufflen = tmp;
-
     while (written < bufflen) {
       tmp = write(outfd, buff + written, sizeof(buff) - written);
       if (tmp < 0) {
@@ -290,12 +298,10 @@ STATUS downloadfile(int transferfd, int outfd, struct fileheader *fi) {
       perror("recv");
       exit(EXIT_FAILURE); // TODO fatal?
     }
-
     if (tmp == 0) {
       // TODO keep file or trash it if unfinished? Keep in a cache and retry?
       return ERROR_CONNECTION_CLOSED;
     }
-
     received += tmp;
     bufflen = tmp;
     while (written < bufflen) {
@@ -344,15 +350,12 @@ STATUS sendheader(int transferfd, const struct fileheader *fi) {
       perror("send");
       exit(EXIT_FAILURE);
     }
-
     if (tmp == 0) {
-      logs(CHIME_WARN "File header not completely sent");
+      logs(CHIME_WARN "WARNING: File header not completely sent");
       return ERROR_INCOMPLETE_SEND;
     }
-
     sent += tmp;
   }
-
   return OK;
 }
 
@@ -455,6 +458,10 @@ STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
   return OK;
 }
 
+STATUS setup_p2p(struct p2p_request *req) {
+  return OK;
+}
+
 /* XXX XXX XXX XXX
  * for now a test with a single client will work
  * but obviously accept new clients on the second port
@@ -463,8 +470,6 @@ STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
 STATUS setup_file_transfer(struct connection *conn) {
   int listenfd, transferfd, rv;
   struct addrinfo hints, *servinfo, *p;
-  struct sockaddr_storage client_addr;
-  socklen_t sin_size;
   int yes = 1;
 
   struct fileheader fh;
@@ -534,9 +539,79 @@ STATUS setup_file_transfer(struct connection *conn) {
       /* XXX Handle non-fatal errors */
     }
   }
+  return OK;
 }
 
 /* PROTOTYPE FILE MANAGING */
+
+void *transfermanager(void *arg) {
+  int listenfd, newfd, rv;
+  struct addrinfo hints, *servinfo, *p;
+  struct sockaddr_storage their_addr;
+  socklen_t sin_size;
+  int yes = 1;
+  int running = 1;
+
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = AI_PASSIVE;
+
+  if ((rv = getaddrinfo(NULL, "33402", &hints, &servinfo)) != 0) {
+    logs(CHIME_WARN "Could not set up file transfering thread\n");
+    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+    return NULL; // TODO proper return value
+  }
+
+  for (p = servinfo; p; p = p->ai_next) {
+    if ((listenfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+      perror("socket");
+      continue;
+    }
+
+    if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+      logs(CHIME_WARN "encountered an error while setting up file socket");
+      logs(CHIME_WARN "the server may be unable to bind to the port");
+      perror("setsockopt");
+    }
+
+    if (bind(listenfd, p->ai_addr, p->ai_addrlen) == -1) {
+      close(listenfd);
+      perror("bind");
+      continue;
+    }
+    break;
+  }
+
+  if (!p) {
+    logs(CHIME_WARN "Unable to connect to second port. Setting client to transfer over msg instead");
+    logs(CHIME_WARN "Warning: Latency proportional to file size may be experienced");
+    // logs(CHIME_WARN "Set option NO_TRANSFER_ON_MSG to disable this feature");
+    // XXX do above
+  }
+
+  if (listen(listenfd, BACKLOG) == -1) {
+    logs(CHIME_WARN "Could not set up socket for listening");
+    perror("listen");
+    return NULL;
+  }
+
+  logs(CHIME_INFO "File transfer setup successful");
+  while (running) {
+    newfd = accept(listenfd, (struct sockaddr *) &their_addr, &sin_size);
+    if (newfd < 0) {
+      if (errno != EINTR) {
+        logs(CHIME_WARN "Warning: Error occured while listening for file transfer connections");
+      }
+      break;
+    }
+
+    printf("%p %d\n", transfer_conns, num_transfer_conns);
+    transfer_conns[num_transfer_conns] = newfd;
+    num_transfer_conns++;
+  }
+  return NULL;
+}
 
 /*
  * name: manager TODO
@@ -617,6 +692,10 @@ void *manager(void *arg) {
   return NULL;
 }
 
+void init(void) {
+  transfer_conns = transfer_conns_arr;
+}
+
 /*
  * name: main
  * 
@@ -635,12 +714,15 @@ int main(int argc, char **argv) {
   char logbuff[LOGBUFF_STR_LEN];
   struct sigaction s_act, s_oldact; /* Set signal handlers */
   int res;
+  pthread_t managert;
+  pthread_t transfert;
 
   if (argc >= 2) {
     port = argv[2];
   }
 
   log_init();
+  init();
 
   s_act.sa_sigaction = sa_handle;
   s_act.sa_flags = SA_SIGINFO;
@@ -704,10 +786,15 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  pthread_t managert;
   if (pthread_create(&managert, NULL, manager, NULL)) {
+    logs(CHIME_FATAL "FATAL: Unable to create manager thread");
     perror("pthread_create");
     exit(EXIT_FAILURE);
+  }
+
+  if (pthread_create(&transfert, NULL, transfermanager, NULL)) {
+    logs(CHIME_WARN "WARNING: Unable to create file transfering thread");
+    perror("pthread_create");
   }
 
   logs(GREEN "Manager thread created" ANSI_RESET);
