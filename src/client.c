@@ -24,6 +24,24 @@
 #define PORT "33401"
 #define MAXDATASIZE 100
 
+pthread_cond_t file_ready = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// XXX move fh from server to its own file and include it here
+struct fileheader {
+  char *filename;
+  int size;
+};
+
+/* Should be modified only when ready to send */
+struct fileheader fh;
+// XXX move src/threading.h into here 
+// XXX if (messagetype == FUPLOAD) set fh accordingly
+// and
+//  pthread_cond_broadcast(&file_ready)
+// this should let thread filetransfer upload/download the 
+// necessary file and then sleep again
+
 /*
  * sa_handle() - Catch SIGINT and SIGTERM and disconnect from
  * the server
@@ -33,6 +51,48 @@
  */
 void sa_handle(int signal, siginfo_t *info, void *ucontext) {
     connected = 0;
+}
+
+void *filetransfer(void *arg) {
+  int sockfd;
+  char *hostname = "127.0.0.1"; // XXX
+  char *port = "33402";
+  struct addrinfo hints, *servinfo, *p;
+  int rv;
+
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  if ((rv = getaddrinfo(hostname, port, &hints, &servinfo)) != 0) {
+    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+    return NULL;
+  }
+
+  for (p = servinfo; p; p = p->ai_next) {
+    if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+      perror("socket");
+      continue;
+    }
+    if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+      close(sockfd);
+      perror("connect:");
+    }
+  }
+
+  if (!p) {
+    fprintf(stderr, "Could not connect to transfer port\n");
+    return NULL;
+  }
+
+  /* Sleep until activated to upload or download a file, then set a status and
+   * sleep again */
+  int condition = 0;
+  pthread_mutex_lock(&mutex);
+  while (!condition) {
+    pthread_cond_wait(&file_ready, &mutex);
+  }
+  pthread_mutex_unlock(&mutex);
+  return NULL;
 }
 
 // XXX status login(struct connection *conn) {}
@@ -79,12 +139,12 @@ int main(int argc, char **argv) {
   // loop through all the results and connect to the first we can
   for (p = servinfo; p != NULL; p = p->ai_next) {
     if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-      perror("client: socket");
+      perror("socket");
       continue;
     }
     if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
       close(sockfd);
-      perror("client: connect");
+      perror("connect");
       continue;
     }
     break;
@@ -103,11 +163,11 @@ int main(int argc, char **argv) {
   s_act.sa_flags = SA_SIGINFO;
   res = sigaction(SIGTERM, &s_act, &s_oldact);
   if (res != 0) {
-      perror("sigaction:");
+      perror("sigaction");
   }
   res = sigaction(SIGINT, &s_act, &s_oldact);
   if (res != 0) {
-      perror("sigaction:");
+      perror("sigaction");
   }
 
   conn.sfd = sockfd;
