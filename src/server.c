@@ -23,23 +23,19 @@
 #include "transmitmsg.h"
 #include "signaling.h"
 #include "logging.h"
+#include "fileheader.h"
+#include "transmitfile.h"
+#include "math.h"
+#include "fileinfo.h"
 
 #define PORT "33401"
 #define BACKLOG 10
-#define FILEBUFF_LEN 1000 // TODO find optimization for this
-#define HEADERBUFF_LEN 200 // TODO optimize
-#define FILENAME_LEN 100
 #define MODE 0666 // TODO mv to defs
 
 #define UPTIME_STR_LEN 10
 #define LOGBUFF_STR_LEN 100
 
 /* Each file sent is prepended by this so that the recipient knows what to expect */
-struct fileheader {
-  char filename[FILENAME_LEN + 1];
-  size_t size;
-};
-
 struct p2p_request {
   int requester_uid; /* user requesting to connect */
   int requestee_uid; /* user being connected to */
@@ -195,355 +191,51 @@ void broadcastmsg(struct message *m) {
   }
 }
 
-int min(int a, int b) {
-  return a < b ? a : b;
-}
-
-/*
- * name: uploadmanager
- * params: file descriptor outfd, connection pointer conn, fileheader pointer filei
- *
- * This thread sends a file to the client associated with conn
- *
- * Return type: TBD
- */
-void *uploadmanager(int outfd, struct connection *conn, struct fileheader *filei) {
-  char buff[FILEBUFF_LEN];
-  size_t received = 0, written = 0, tmp, bufflen;
-
-  while (received < filei->size) {
-    tmp = recv(conn->sfd, buff, min(sizeof(buff), filei->size - received), 0);
-    if (tmp < 0) {
-      perror("[uploadmanager] recv:");
-      return NULL; // TODO
-    }
-    if (tmp == 0) {
-      logs(YELLOW "[uploadmanager]:" RED " Connection to client dropped before file could be transferred.\n" ANSI_RESET);
-      return NULL; // XXX return ERR_LOST_CONN
-    }
-    received += tmp;
-    bufflen = tmp;
-    while (written < bufflen) {
-      tmp = write(outfd, buff + written, sizeof(buff) - written);
-      if (tmp < 0) {
-        if (errno == EINTR) {
-          continue; // try again
-        }
-      }
-      if (tmp == 0) {
-        fprintf(stderr, "[uploadmanager]: write returned 0\n");
-        perror("write");
-        return NULL; // TODO return ERR_FAILED_SYS
-      }
-      written += tmp;
-    }
-  }
-  return NULL; // TODO
-}
-
-/*
- * name: parsefileheader
- * params: connection pointer conn, filehader pointer dest
- *
- * Fills the dest pointer with the necessary information grabbed
- * from conn after an FUPLOAD request
- *
- * Return value: OK on success. If any of the system calls open,
- * recv fail, then ERROR_FAILED_SYSCALL is returned.
- */
-STATUS parsefileheader(const struct connection *conn, struct fileheader *dest) {
-  int outfd, parsed = 0;
-  //struct fileheader header;
-  // TODO recv filehader, parse filename and info
-
-  while ((outfd = open(dest->filename, O_CREAT | O_WRONLY, MODE)) == -1) {
-    if (errno == EINTR) {
-      continue;
-    }
-    return ERROR_FAILED_SYSCALL;
-  }
-  while (!parsed) {
-    parsed = 1; // XXX finish
-  }
-  return OK;
-}
-
-/*
- * downloadfile() - receives and writes
- *  a file from the file descriptor
- *  transferfd and into outfd
- * @transferd: file descriptor representing
- *  the socket connection from which to download the file
- * @outfd: file descriptor representing where to write
- *  the contents of the received file into
- * @fi: a fileheader that represents the file to be received
- *
- * downloadfile() attempts to receive the file represented by
- * fi and store the contents into the file represented by outfd.
- *
- * Return:
- * * OK on success
- * * ERROR_CONNECTION_CLOSED
- *      The number of bytes received was less than that specified
- *      by fi->size. The resulting file may or may not be incomplete,
- */
-STATUS downloadfile(int transferfd, int outfd, struct fileheader *fi) {
-  char buff[FILEBUFF_LEN];
-  //if (upload) {
-  int received = 0, written = 0, tmp;
-  while (received < fi->size) {
-    int bufflen;
-    tmp = recv(transferfd, buff + received, min(sizeof(buff) - received, fi->size - received), 0);
-    if (tmp < 0 && errno != EINTR) {
-      perror("recv");
-      exit(EXIT_FAILURE); // TODO fatal?
-    }
-    if (tmp == 0) {
-      // TODO keep file or trash it if unfinished? Keep in a cache and retry?
-      return ERROR_CONNECTION_CLOSED;
-    }
-    received += tmp;
-    bufflen = tmp;
-    while (written < bufflen) {
-      tmp = write(outfd, buff + written, bufflen - written);
-      if (tmp < 0 && errno != EINTR) {
-        perror("write");
-        exit(EXIT_FAILURE);
-      }
-      if (tmp == 0) {
-        return ERROR_CONNECTION_CLOSED;
-      }
-      written += tmp;
-    }
-  }
-  return OK;
-}
-
-/*
- * sendheader() - send a file header
- * @transferfd: socket file descriptor to send
- *    header through
- * @fi: fileheader to be sent
- *
- * sendheader() attemps to send a fileheader through
- * the socket referred to by transferfd. fi must not
- * be null and transferfd must be a valid file descriptor. 
- *
- * Return: 
- * * OK on success
- * * ERROR_INCOMPLETE_SEND
- *    The connection on transferfd was closed prematurely,
- *    and the full fileheader could not be sent. This is
- *    fatal to the file transfer attempt since none of the
- *    file was sent through the connection.
- *    XXX return from file transfer thread unsuccessful
- */
-STATUS sendheader(int transferfd, const struct fileheader *fi) {
-  char buff[HEADERBUFF_LEN];
-  int sent = 0, bufflen, tmp;
-  sprintf(buff, "%s\n%ld\n", fi->filename, fi->size);
-  bufflen = strlen(buff);
-  while (sent < bufflen) {
-    tmp = send(transferfd, buff + sent, bufflen - sent, 0);
-    if (tmp < 0 && errno != EINTR) {
-      logs(CHIME_FATAL "FATAL: Could not send fileheader");
-      perror("send");
-      exit(EXIT_FAILURE);
-    }
-    if (tmp == 0) {
-      logs(CHIME_WARN "WARNING: File header not completely sent");
-      return ERROR_INCOMPLETE_SEND;
-    }
-    sent += tmp;
-  }
-  return OK;
-}
-
-/*
- * recvheader() - receive a file header
- * @transferfd: socket to receive from
- * @fi - pointer to store contents of received
- *    header into 
- *
- * recvheader() attmpts to receive a full file header from
- * the connection associated with the socket file descriptor
- * transferfd. It parses received data using a newline "\n"
- * delimiter and stores the resulting content in fi.
- * transferfd must refer to a valid socket.
- * 
- * recvheader() may terminate the program if the 
- * system call recv() returns an error state other than
- * EINTR.
- *
- * Return:
- * * OK on success
- * * ERROR_INCOMPLETE_RECV
- *    the connection was closed before the data received filled
- *    every field of fi.
- */ 
-STATUS recvheader(int transferfd, struct fileheader *fi) {
-  char buff[HEADERBUFF_LEN], *fieldp;
-  int received = 0, tmp, flag = 0;
-  strtok(buff, "\n");
-  while (flag < 2) {
-    tmp = recv(transferfd, buff + received, HEADERBUFF_LEN - received, 0);
-    if (tmp < 0 && errno != EINTR) {
-      logs(CHIME_FATAL "FATAL: Could not receive file header");
-      perror("recv");
-      exit(EXIT_FAILURE); // XXX fatal?
-    }
-    if (tmp == 0) {
-      logs(CHIME_WARN "File header not completely received");
-      return ERROR_INCOMPLETE_RECV;
-    }
-    fieldp = strtok(NULL, "\n");
-    if (fieldp && flag) {
-      flag++;
-      fi->size = atol(fieldp);
-    }
-    if (fieldp && !flag) {
-      flag++;
-      strcpy(fi->filename, fieldp);
-    }
-  }
-  return OK;
-}
-
-/*
- * uploadfile() - send a file through filefd
- * @filefd: file descriptor of the file to upload
- * @transferfd: socket file descriptor to send the file through
- * @fi: a file header describing the contents of the file
- *    refered to by filefd
- *
- * uploadfile() buffers data read from filefd and sends it in chunks.
- * filefd and transferfd must refer to valid file descriptors, and
- * fi must be non null.
- *
- * Return:
- * * OK on success
- * * ERROR_INCOMPLETE_SEND
- *    the number of bytes sent was less than fi->size
- */
-STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
-  char buff[FILEBUFF_LEN];
-  int sent = 0, bread = 0, tmp;
-  while (bread < fi->size) {
-    int bufflen;
-    tmp = read(filefd, buff + bread, min(sizeof(buff) - bread, fi->size - bread));
-    if (tmp < 0 && errno != EINTR) {
-      logs(CHIME_FATAL "FATAL: Could not read from file");
-      perror("read");
-      exit(EXIT_FAILURE);
-    }
-    if (tmp == 0) {
-      return ERROR_INCOMPLETE_SEND;
-    }
-    bread += tmp;
-    bufflen = tmp;
-    while (sent < bufflen) {
-      tmp = send(transferfd, buff + sent, bufflen - sent, 0);
-      if (tmp < 0 && errno != EINTR) {
-        logs(CHIME_FATAL "FATAL: Could not send file");
-        perror("send");
-      }
-
-      if (tmp == 0) {
-        logs(CHIME_WARN "File not sent completely");
-        return ERROR_INCOMPLETE_SEND;
-      }
-      sent += tmp;
-    }
-  }
-  return OK;
-}
-
 STATUS setup_p2p(struct p2p_request *req) {
   return OK;
 }
 
-/* XXX XXX XXX XXX
- * for now a test with a single client will work
- * but obviously accept new clients on the second port
- * and don't just try to re-bind to it
- */
-STATUS setup_file_transfer(struct connection *conn) {
-  int listenfd, transferfd, rv;
-  struct addrinfo hints, *servinfo, *p;
-  int yes = 1;
+void *file_transfer(int sfd, void *finfop) {
+  struct fileinfo *finfo = (struct fileinfo *) finfop;
 
-  struct fileheader fh;
+  if (!finfo) {
+    logs(CHIME_WARN "Invalid file transfer request. Aborting...\n");
+    return NULL;
+  } 
 
-  int filefd;
-
-  memset(&hints, 0, sizeof hints);
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_flags = AI_PASSIVE;
-
-  if ((rv = getaddrinfo(NULL, "33402", &hints, &servinfo)) != 0) {
-    logs(CHIME_WARN "Could not setup new connection for client file transfer");
-    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-    return ERROR_SETUP_FAILURE;
+  switch (finfo->status) {
+    case UPLOAD:
+      if (sendheader(sfd, &finfo->header) != OK) {
+        logs(CHIME_WARN "sendheader returned non-OK status");
+        /* Handle non-fatal errors */
+      }
+      if (uploadfile(sfd, finfo->fd, &finfo->header) != OK) {
+        logs(CHIME_WARN "uploadfile returned non-OK status");
+        /* Handle non-fatal errors */
+      } 
+      logs(CHIME_INFO "finished upload procedure");
+      break;
+    case DOWNLOAD:
+      if (recvheader(sfd, &finfo->header) != OK) {
+        logs(CHIME_WARN "recvheader returned non-OK status");
+        /* Handle non-fatal errors */
+      }
+      if (downloadfile(sfd, finfo->fd, &finfo->header) != OK) {
+        logs(CHIME_WARN "downloadfile returned non-OK status");
+      }
+      logs(CHIME_INFO "finished file download procedure");
+      break;
+    case NOT_READY:
+      logs(CHIME_WARN "file_transfer called with NOT_READY file status. Exiting");
+    default:
+      logs(CHIME_WARN "file_transfer called with invalid transfer status");
+      break;
   }
-
-  for (p = servinfo; p; p = p->ai_next) {
-    if ((transferfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-      perror("socket");
-      continue;
-    }
-
-    if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-      logs(CHIME_WARN "setsockopt encountered an error");
-      logs(CHIME_WARN "the server may be unable to bind to port");
-      perror("setsockopt");
-    }
-
-    if (bind(listenfd, p->ai_addr, p->ai_addrlen) == -1) {
-      close(listenfd);
-      perror("bind");
-      continue;
-    }
-    break;
-  }
-
-  if (!p) {
-    logs(CHIME_WARN "Unable to connect to second port. Setting client to transfer over msg instead");
-    logs(CHIME_WARN "Warning: Latency proportional to file size may be experienced\n");
-    // logs(CHIME_WARN "Set option NO_TRANSFER_ON_MSG to disable this feature");
-  }
-
-  while ((transferfd = listen(listenfd, 1)) == -1 && errno == EINTR);
-  if (transferfd < 0) {
-    perror("listen");
-    return ERROR_SETUP_FAILURE;
-  }
-  conn->transferfd = transferfd;
-  if (recvheader(conn->transferfd, &fh) != OK) {
-    /* XXX Handle non-fatal errors */
-  }
-
-  while ((filefd = open(fh.filename, O_CREAT | O_WRONLY, MODE)) == -1 && errno == EINTR);
-  if (filefd < 0) {
-    perror("open");
-    return ERROR_SETUP_FAILURE;
-  }
-
-  if (downloadfile(conn->transferfd, filefd, &fh) != OK) {
-    /* XXX Handle non-fatal errors */
-  }
-  logs(CHIME_INFO "File uploaded");
-  for (int i = 0; i < num_transfer_conns; i++) {
-    lseek(filefd, 0, SEEK_SET);
-    if (uploadfile(transferfd, filefd, &fh) != OK) {
-      /* XXX Handle non-fatal errors */
-    }
-  }
-  return OK;
+  logs(CHIME_INFO "file_transfer thread exiting");
+  return NULL;
 }
 
-/* PROTOTYPE FILE MANAGING */
-
+/* PROTOTYPE FILE MANAGEMENT */
 void *transfermanager(void *arg) {
   int listenfd, newfd, rv;
   struct addrinfo hints, *servinfo, *p;

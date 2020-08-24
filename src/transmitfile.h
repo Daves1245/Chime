@@ -3,11 +3,11 @@
 
 #include "types.h"
 #include "status.h"
-#include "connection.h"
+#include "fileheader.h"
 
-STATUS setup_file_upload(struct connection *conn);
-STATUS setup_file_download(struct connection *conn);
-STATUS uploadfile(struct connection *conn);
-STATUS downloadfile(struct connection *conn);
+STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi); /* send a file */
+STATUS downloadfile(int transferfd, int outfd, const struct fileheader *fi); /* receive a file */
+STATUS sendheader(int transferfd, const struct fileheader *fi); /* send a file header */
+STATUS recvheader(int transferfd, struct fileheader *fi); /* receive a file header */
 
 #endif

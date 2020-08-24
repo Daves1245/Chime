@@ -11,6 +11,9 @@
 #define HANDLE_LEN 30
 #define MAX_TEXT_LEN 100
 #define TIMESTAMP_LEN 20
+#define FILENAME_LEN 100
+#define FILEBUFF_LEN 1000 // TODO find optimization for this
+#define HEADERBUFF_LEN 200 // TODO optimize
 
 #define HASH_LEN 256 // length of hash
 
@@ -28,5 +31,10 @@
 
 /* Errors */
 #define ECONNCLSD -1 
+
+/* File info status variations */
+#define NOT_READY 0
+#define UPLOAD 1
+#define DOWNLOAD 2
 
 #endif

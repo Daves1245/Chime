@@ -31,40 +31,6 @@ extern volatile sig_atomic_t connected;
 extern STATUS uploadfile(struct connection *conn, int fd);
 
 /*
- * name: cmdparse
- * params: message pointer msg
- *
- * Performs the necessary action that
- * the command in msg specifies
- */
-STATUS cmdparse(struct message *msg) {
-  char *cmd, buff[MAX_TEXT_LEN + 1];
-  strcpy(buff, msg->txt + 1);
-  strtok(buff, " ");
-  cmd = strtok(NULL, " ");
-  if (cmd) { // commands with arguments
-    if (strcmp(cmd, "upload") == 0) {
-      char *filepath = strtok(NULL, " ");
-      if (!filepath) {
-        fprintf(stderr, RED "usage: /upload [file]\n");
-        return ERROR_INVALID_FILEPATH;
-      }
-      int fd = open(filepath, O_RDONLY);
-      if (fd < 0) {
-        fprintf(stderr, RED "file path must be valid");
-        perror("open");
-        return ERROR_INVALID_FILEPATH;
-      }
-    }
-  } else { // commands without arguments
-    if (strcmp(msg->txt + 1, "exit\n") == 0) {
-      msg->flags = FDISCONNECT;
-    }
-  }
-  return OK;
-}
-
-/*
  * receive_wrapper() - wrapper for grabbing fields in recvmessage
  * @sfd: the socket file descriptor of the connected user
  * @buff: the buffer to recv into
