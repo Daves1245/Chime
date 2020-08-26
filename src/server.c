@@ -27,6 +27,8 @@
 #include "transmitfile.h"
 #include "math.h"
 #include "fileinfo.h"
+#include "secret.h"
+#include "ftrequest.h"
 
 #define PORT "33401"
 #define BACKLOG 10
@@ -61,12 +63,14 @@ volatile sig_atomic_t running = 1;
 
 /* Pointer to linked list of currently connected users */
 struct connection *connections;
+
 /* The uid to assign to the next connected user */
 int next_uid;
 
 /* Array of pollfd structures used to find out if a user has sent a message
  * or is ready to receive a message */
 struct pollfd listener[BACKLOG];
+
 /* The number of currently connected users */
 int numconns;
 
@@ -85,6 +89,7 @@ void freeconnections(struct connection *c) {
     disconnect(iterator);
   }
 }
+
 /*
  * name: login_user 
  * params: urequest
@@ -97,8 +102,11 @@ STATUS login_user(struct connection *entry) {
   if (!connections) {
     connections = entry;
     connections->next = connections->prev = entry;
-    return entry->uinfo.uid = next_uid++;
+    entry->uinfo.uid = next_uid++;
+    printf("hm\n");
+    return OK;
   }
+  printf("beginning search for duplicate username\n");
   for (iterator = connections; iterator->next != connections; iterator = iterator->next) {
     printf("handle: %s\n", iterator->uinfo.handle);
     // TODO if (iterator->uinfo.uid == entry->uinfo.uid) {return ERROR_ALREADY_CONNECTED;}
@@ -195,32 +203,32 @@ STATUS setup_p2p(struct p2p_request *req) {
   return OK;
 }
 
-void *file_transfer(int sfd, void *finfop) {
-  struct fileinfo *finfo = (struct fileinfo *) finfop;
+void *file_transfer(void *ftreq) {
+  struct ftrequest *req = (struct ftrequest *) ftreq;
 
-  if (!finfo) {
-    logs(CHIME_WARN "Invalid file transfer request. Aborting...\n");
+  if (!req) {
+    logs("file_transfer called with null argument when non-null required. Aborting...");
     return NULL;
   } 
 
-  switch (finfo->status) {
+  switch (req->finfo.status) {
     case UPLOAD:
-      if (sendheader(sfd, &finfo->header) != OK) {
+      if (sendheader(req->conn->transferfd, &req->finfo.header) != OK) {
         logs(CHIME_WARN "sendheader returned non-OK status");
         /* Handle non-fatal errors */
       }
-      if (uploadfile(sfd, finfo->fd, &finfo->header) != OK) {
+      if (uploadfile(req->conn->transferfd, req->finfo.fd, &req->finfo.header) != OK) {
         logs(CHIME_WARN "uploadfile returned non-OK status");
         /* Handle non-fatal errors */
       } 
       logs(CHIME_INFO "finished upload procedure");
       break;
     case DOWNLOAD:
-      if (recvheader(sfd, &finfo->header) != OK) {
+      if (recvheader(req->conn->transferfd, &req->finfo.header) != OK) {
         logs(CHIME_WARN "recvheader returned non-OK status");
         /* Handle non-fatal errors */
       }
-      if (downloadfile(sfd, finfo->fd, &finfo->header) != OK) {
+      if (downloadfile(req->conn->transferfd, req->finfo.fd, &req->finfo.header) != OK) {
         logs(CHIME_WARN "downloadfile returned non-OK status");
       }
       logs(CHIME_INFO "finished file download procedure");
@@ -231,6 +239,7 @@ void *file_transfer(int sfd, void *finfop) {
       logs(CHIME_WARN "file_transfer called with invalid transfer status");
       break;
   }
+  close(req->finfo.fd);
   logs(CHIME_INFO "file_transfer thread exiting");
   return NULL;
 }
@@ -249,7 +258,7 @@ void *transfermanager(void *arg) {
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
 
-  if ((rv = getaddrinfo(NULL, "33402", &hints, &servinfo)) != 0) {
+  if ((rv = getaddrinfo("127.0.0.1", "33402", &hints, &servinfo)) != 0) {
     logs(CHIME_WARN "Could not set up file transfering thread\n");
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
     return NULL; // TODO proper return value
@@ -289,7 +298,13 @@ void *transfermanager(void *arg) {
   }
 
   logs(CHIME_INFO "File transfer setup successful");
+
   while (running) {
+    struct message request, response;
+    long received_secret;
+    struct connection *iterator;
+    int flag = 0, found = 0;
+
     newfd = accept(listenfd, (struct sockaddr *) &their_addr, &sin_size);
     if (newfd < 0) {
       if (errno != EINTR) {
@@ -298,9 +313,47 @@ void *transfermanager(void *arg) {
       break;
     }
 
-    printf("%p %d\n", transfer_conns, num_transfer_conns);
+    /* Authenticate with currently connected char-message user */
+    // TODO server sends WHO request first
+    memset(&request, 0, sizeof request);
+
+    memset(&response, 0, sizeof response);
+    request.uid = response.uid = 0;
+    strcpy(response.from, "SERVER"); // TODO make MESSAGE_INIT
+    recvmessage(newfd, &request);
+    received_secret = atol(request.txt);
+    printf("received secret: %ld\n", received_secret);
+    /* XXX This is bad, and needs changing ASAP */
+    for (iterator = connections; !flag || iterator != connections; iterator = iterator->next) {
+      flag |= iterator == connections;
+      if (iterator->secret == received_secret) {
+        iterator->transferfd = newfd; // this is so bad
+        found = 1;
+      }
+    }
+
+    if (!found) {
+      strcpy(response.txt, "INVALID SECRET\n");
+      response.flags = FDISCONNECT;
+      sendmessage(newfd, &response);
+      close(newfd);
+      continue;
+    }
+
     transfer_conns[num_transfer_conns] = newfd;
     num_transfer_conns++;
+  }
+  return NULL;
+}
+
+struct connection *find_conn_by_sfd(int sfd) {
+  struct connection *iterator;
+  int flag;
+  for (iterator = connections; !flag || iterator != connections; iterator = iterator->next) {
+    flag |= iterator == connections;
+    if (iterator->sfd == sfd) {
+      return iterator;
+    }
   }
   return NULL;
 }
@@ -324,10 +377,44 @@ void *manager(void *arg) {
         char logbuff[LOGBUFF_STR_LEN + MAX_TEXT_LEN];
         if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
           recvmessage(listener[i].fd, &m);
+          if (m.flags == FUPLOAD) {
+            pthread_t ftransferinstance; 
+            struct message response;
+            struct ftrequest request;
+
+            logs(CHIME_INFO "Received upload request\n");
+            memset(&response, 0, sizeof response);
+            memset(&request, 0, sizeof request);
+
+            request.finfo.status = DOWNLOAD;
+            /* TODO make this O(1) */
+            request.conn = find_conn_by_sfd(listener[i].fd);
+
+            if (recvheader(listener[i].fd, &request.finfo.header) != OK) {
+              /* Handle non-fatal errors */
+              logs(CHIME_WARN "recvheader after FUPLOAD request returned non-OK status");
+            }
+
+            /* TODO fix impending duplicate-name bug */
+            while ((request.finfo.fd = open(request.finfo.header.filename, O_CREAT | O_WRONLY, MODE)) == -1 && errno == EINTR);
+            if (request.finfo.fd < 0) {
+              logs(CHIME_WARN "Could not create a file for file transfer");
+              perror("write");
+              return NULL;
+            }
+
+            if (pthread_create(&ftransferinstance, NULL, file_transfer, &request)) {
+              logs(CHIME_WARN "could not create thread for handling file transfer");
+              perror("pthread_create");
+            } else {
+              logs(CHIME_INFO "File transfer thread created successfully");
+            }
+          }
           /* Connect a new user */
           if (m.flags == FCONNECT) {
             struct message ret;
             struct connection *conn;
+            long secret;
 
             conn = malloc(sizeof(struct connection));
             if (!conn) {
@@ -338,11 +425,16 @@ void *manager(void *arg) {
 
             memset(conn, 0, sizeof(*conn));
             memset(&ret, 0, sizeof ret);
+            secret = gen_secret();
+            printf("sending client a secret of %ld\n", secret);
+            sprintf(ret.txt, "%ld\n", secret);
             strcpy(ret.from, "SERVER");
             timestampmessage(&ret);
+            sendmessage(listener[i].fd, &ret);
 
             conn->sfd = listener[i].fd;
-            conn->next = conn->prev = conn;
+            conn->next = conn->prev = conn; // TODO make CONNECTION_INIT(conn);
+            conn->secret = secret;
             strcpy(conn->uinfo.handle, m.from);
             STATUS s = login_user(conn);
             if (s == ERROR_USERNAME_IN_USE) {
@@ -385,6 +477,7 @@ void *manager(void *arg) {
 }
 
 void init(void) {
+  srand(time(NULL));
   transfer_conns = transfer_conns_arr;
 }
 

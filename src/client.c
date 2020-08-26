@@ -24,6 +24,7 @@
 #include "transmitfile.h"
 #include "fileheader.h"
 #include "fileinfo.h"
+#include "secret.h"
 
 #define LOCALHOST "127.0.0.1"
 #define PORT "33401"
@@ -31,6 +32,9 @@
 
 pthread_cond_t file_ready = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t filei_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+pthread_cond_t received_secret = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t secret_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void (*finally)();
 void do_nothing(void) {}
@@ -42,6 +46,7 @@ void notify_transfer(void) {
 
 struct fileinfo finfo;
 int running;
+long secret;
 
 /*
  * TODO the name packmessage should 
@@ -100,26 +105,31 @@ STATUS packmessage(struct message *msg) {
  * the command in msg specifies
  */
 STATUS cmdparse(struct message *msg) {
-  char *cmd, buff[MAX_TEXT_LEN + 1];
+  if (*msg->txt != '/') {
+    return OK; // not a command
+  }
+  char buff[MAX_TEXT_LEN + 1];
   strcpy(buff, msg->txt + 1);
   strtok(buff, " ");
-  cmd = strtok(NULL, " ");
-  if (cmd) { // commands with arguments
-    if (strcmp(cmd, "upload") == 0) {
+  if (strcmp(buff, "upload") == 0) {
+    char *filename;
+
+    filename = strtok(NULL, " ");
+    filename[strcspn(filename, "\r\n")] = '\0';
+
+    printf("FILENAME: `%s`\n", filename);
+    if (filename) {
       struct stat st;
-      char *filepath = strtok(NULL, " ");
       int fd;
-      if (!filepath) {
-        fprintf(stderr, RED "usage: /upload [file]\n");
-        return ERROR_INVALID_FILEPATH;
-      }
-      while ((fd = open(filepath, O_RDONLY)) == -1 && errno == EINTR);
+
+      msg->flags = FUPLOAD;
+      while ((fd = open(filename, O_RDONLY)) == -1 && errno == EINTR);
       if (fd < 0 ) {
-        fprintf(stderr, RED "file path must be valid");
+        fprintf(stderr, RED "File path must be valid\n" ANSI_RESET);
         perror("open");
         return ERROR_INVALID_FILEPATH;
       }
-      if (stat(filepath, &st) != 0) {
+      if (stat(filename, &st) != 0) {
         fprintf(stderr, "Could not stat file\n");
         perror("stat");
         exit(EXIT_FAILURE); // XXX fatal?
@@ -132,16 +142,15 @@ STATUS cmdparse(struct message *msg) {
       pthread_mutex_lock(&filei_mutex);
       finfo.fd = fd;
       finfo.header.size = st.st_size;
-      strcpy(finfo.header.filename, filepath); // TODO only pass basename
+      strcpy(finfo.header.filename, filename); // TODO only pass basename
       pthread_mutex_unlock(&filei_mutex);
-    }
-  } else { // commands without arguments
-    if (strcmp(msg->txt + 1, "exit\n") == 0) {
-      msg->flags = FDISCONNECT;
+    } else {
+      printf("usage: /upload [filename]\n");
     }
   }
   return OK;
 }
+
 
 /*
  * sa_handle() - Catch SIGINT and SIGTERM and disconnect from
@@ -151,7 +160,7 @@ STATUS cmdparse(struct message *msg) {
  * flag to false.
  */
 void sa_handle(int signal, siginfo_t *info, void *ucontext) {
-    connected = 0;
+  connected = 0;
 }
 
 /*
@@ -165,7 +174,14 @@ void *thread_recv(void *pconn) {
   struct connection *conn = (struct connection *) pconn;
   struct message msg;
   STATUS s;
+
   memset(&msg, 0, sizeof msg);
+  recvmessage(conn->sfd, &msg);
+  debugmessage(&msg);
+  secret = atol(msg.txt);
+  printf("received secret %ld\n", secret);
+
+  pthread_cond_broadcast(&received_secret);
 
   while (connected) {
     s = recvmessage(conn->sfd, &msg);
@@ -258,6 +274,7 @@ void *filetransfer(void *pconn) {
     return NULL;
   } 
   for (p = servinfo; p; p = p->ai_next) {
+    printf("trying\n");
     if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
       perror("socket");
       continue;
@@ -266,12 +283,39 @@ void *filetransfer(void *pconn) {
       close(sockfd);
       perror("connect:");
     }
+    break;
   }
 
   if (!p) {
     fprintf(stderr, "Could not connect to transfer port\n");
     return NULL;
   }
+
+  /* Not entirely sure how to use pthread conditional wait.
+   * I decided to use this over while (!secret) {} because the
+   * latter would waste cpu cycles. Hopefully I'm using this
+   * correctly */
+  pthread_mutex_lock(&secret_mutex);
+  while (!secret) {
+    pthread_cond_wait(&received_secret, &secret_mutex);
+  }
+  pthread_mutex_unlock(&secret_mutex);
+
+  struct message request;
+  memset(&request, 0, sizeof request);
+  request.uid = request.id = 0;
+  strcpy(request.from, " ");
+  sprintf(request.txt, "%ld\n", secret);
+  request.flags = FCONNECT;
+  sendmessage(sockfd, &request);
+  recvmessage(sockfd, &request);
+  if (request.flags == FDISCONNECT) {
+    fprintf(stderr, "Could not connect to second port: Secret was invalid\n");
+    return NULL;
+  } else {
+    printf("Successfully connected to second port\n");
+  }
+
 
   /* Sleep until signaled to upload or download a file, then set a status and
    * sleep again */
@@ -300,10 +344,10 @@ void *filetransfer(void *pconn) {
           /* Handle non-fatal errors */
         }
         s2 = downloadfile(conn->transferfd, finfo.fd, &finfo.header);
-          break;
+        break;
       case NOT_READY:
-          fprintf(stderr, "File thread awoken when file not ready to be handled\n");
-          return NULL; // TODO fatal?
+        fprintf(stderr, "File thread awoken when file not ready to be handled\n");
+        return NULL; // TODO fatal?
         break;
       default:
         /* fprintf(stderr, "[filemanager]: Unrecognized option") */
@@ -334,6 +378,7 @@ int main(int argc, char **argv) {
   int res;
   pthread_t sendertid;
   pthread_t receivertid;
+  pthread_t filetransferid;
   struct connection conn;
 
   port = PORT;
@@ -408,6 +453,12 @@ int main(int argc, char **argv) {
   if (pthread_create(&receivertid, NULL, thread_recv, &conn)) {
     fprintf(stderr, "Could not create msg receiving thread\n");
     perror("pthread_create");
+    exit(EXIT_FAILURE);
+  }
+
+  if (pthread_create(&filetransferid, NULL, filetransfer, &conn)) {
+    fprintf(stderr, "Could not create filetransfer thread\n");
+    perror("pthread_crete");
     exit(EXIT_FAILURE);
   }
 

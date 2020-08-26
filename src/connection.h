@@ -17,6 +17,7 @@
 struct connection {
     int sfd;                        /* This user's socket for messaging */
     int transferfd;                 /* This user's socket for file transfers */
+    long secret;                    /* Used to verify authentication over multiple sockets */
     struct user uinfo;              /* Info about user */
     struct connection *next, *prev; /* Make this a linked list */
 };
