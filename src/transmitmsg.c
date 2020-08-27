@@ -156,7 +156,8 @@ STATUS sendmessage(int sfd, const struct message *msg) {
   size_t tmp;
   while (sent < tosend) {
     tmp = send(sfd, buff, strlen(buff) + 1 - sent, 0);
-    if (tmp < 0) {
+    if (tmp < 0 && errno != EINTR) {
+      printf("(sendmessage): send returned an error other than EINTR\n");
       perror("send");
       exit(EXIT_FAILURE);
     } else if (tmp == 0) {

@@ -71,33 +71,50 @@ STATUS sendheader(int transferfd, const struct fileheader *fi) {
  * * ERROR_INCOMPLETE_RECV
  *    the connection was closed before the data received filled
  *    every field of fi.
+ *
+ *  TODO this currently takes some of the file. make it so that
+ *  any data not part of the header is sent back to the socket so
+ *  that a later recv() may rightfully get it.
  */ 
 STATUS recvheader(int transferfd, struct fileheader *fi) {
   char buff[HEADERBUFF_LEN], *fieldp;
-  int received = 0, tmp, flag = 0;
-  strtok(buff, "\n");
-  while (flag < 2) {
-    tmp = recv(transferfd, buff + received, HEADERBUFF_LEN - received, 0);
-    if (tmp < 0 && errno != EINTR) {
-      // TODO fatal()
-      printf("FATAL: Could not receive file header\n");
+  int received = 0, tmp;
+  received = recv(transferfd, buff, sizeof buff, 0);
+  printf("RECVHEADER: initial recv gave a buffer of - `%s`\n", buff);
+  fieldp = strtok(buff, "\n");
+  printf("RECVHEADER: initial strtok returned fieldp = `%s`\n", fieldp);
+  printf("RECVHEADER: probing for first field...\n");
+  while (!fieldp) {
+    while ((tmp = recv(transferfd, buff + received, sizeof(buff) - received, 0)) == -1 && errno == EINTR);
+    if (tmp < 0) {
       perror("recv");
-      exit(EXIT_FAILURE); // TODO fatal?
+      return ERROR_FAILED_SYSCALL;
     }
     if (tmp == 0) {
-      printf("WARNING: File header not received completely\n");
-      return ERROR_INCOMPLETE_RECV;
+      return ERROR_CONNECTION_LOST;
+    }
+
+    fieldp = strtok(NULL, "\n");
+  }
+  printf("RECVHEADER: probing done. full filename is: `%s`\n", fieldp);
+  strcpy(fi->filename, fieldp);
+  fieldp = strtok(NULL, "\n");
+  printf("RECVHEADER: initial strtok for size field returned: `%s`\n", fieldp);
+  printf("RECVHEADER: probing for the rest of size field...\n");
+  while (!fieldp) {
+    while ((tmp = recv(transferfd, buff + received, sizeof(buff) - received, 0)) == -1 && errno == EINTR);
+    if (tmp < 0) {
+      perror("recv");
+      return ERROR_FAILED_SYSCALL;
+      if (tmp == 0) {
+        return ERROR_CONNECTION_LOST;
+      }
     }
     fieldp = strtok(NULL, "\n");
-    if (fieldp && flag) {
-      flag++;
-      fi->size = atol(fieldp);
-    }
-    if (fieldp && !flag) {
-      flag++;
-      strcpy(fi->filename, fieldp);
-    }
   }
+  fi->size = atol(fieldp);
+  printf("RECVHEADER: Final probing done. size is %ld\n", fi->size);
+  printf("RECVHEADER: exiting recvheader\n");
   return OK;
 }
 
@@ -124,6 +141,7 @@ STATUS downloadfile(int transferfd, int outfd, const struct fileheader *fi) {
   char buff[FILEBUFF_LEN];
   int received = 0, written = 0, tmp;
   while (received < fi->size) {
+    printf("file size: %ld, received bytes: %d\n", fi->size, received);
     int bufflen;
     tmp = recv(transferfd, buff + received, min(sizeof(buff) - received, fi->size - received), 0);
     if (tmp < 0 && errno != EINTR) {
@@ -169,12 +187,14 @@ STATUS downloadfile(int transferfd, int outfd, const struct fileheader *fi) {
  *    the number of bytes sent was less than fi->size
  */
 STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
+  printf("uploadfile called with filefd: %d\n", filefd);
   char buff[FILEBUFF_LEN];
   int sent = 0, bread = 0, tmp;
   while (bread < fi->size) {
     int bufflen;
     tmp = read(filefd, buff + bread, min(sizeof(buff) - bread, fi->size - bread));
-    if (tmp < 0 && errno != EINTR) {
+    if (tmp < 0) {
+      if (errno == EINTR) continue;
       // TODO make fatal() instead of manual exit
       perror("read");
       exit(EXIT_FAILURE);
@@ -185,8 +205,10 @@ STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
     bread += tmp;
     bufflen = tmp;
     while (sent < bufflen) {
+      printf("file size: %ld, bytes sent: %d\n", fi->size, sent);
       tmp = send(transferfd, buff + sent, bufflen - sent, 0);
-      if (tmp < 0 && errno != EINTR) {
+      if (tmp < 0) {
+        if (errno == EINTR) continue;
         // TODO fatal()
         perror("send");
         exit(EXIT_FAILURE);
@@ -200,5 +222,6 @@ STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
       sent += tmp;
     }
   }
+  printf("leaving uploadfile. bytes left to send: %ld\n", fi->size - sent);
   return OK;
 }

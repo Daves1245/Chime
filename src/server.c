@@ -205,42 +205,47 @@ STATUS setup_p2p(struct p2p_request *req) {
 
 void *file_transfer(void *ftreq) {
   struct ftrequest *req = (struct ftrequest *) ftreq;
+  logs("[file_transfer]: started new thread. Received argument:");
+  printf("sfd: %d\ntransferfd:%d\nhandle:%s\n", req->conn->sfd, req->conn->transferfd, req->conn->uinfo.handle);
 
   if (!req) {
-    logs("file_transfer called with null argument when non-null required. Aborting...");
+    logs("[file_transfer]: called with null argument when non-null required. Aborting...");
     return NULL;
   } 
 
   switch (req->finfo.status) {
     case UPLOAD:
-      if (sendheader(req->conn->transferfd, &req->finfo.header) != OK) {
-        logs(CHIME_WARN "sendheader returned non-OK status");
+      if (recvheader(req->conn->transferfd, &req->finfo.header) != OK) {
+        logs(CHIME_WARN "[file_transfer]: recvheader returned non-OK status");
         /* Handle non-fatal errors */
       }
       if (uploadfile(req->conn->transferfd, req->finfo.fd, &req->finfo.header) != OK) {
-        logs(CHIME_WARN "uploadfile returned non-OK status");
+        logs(CHIME_WARN "[file_transfer]: uploadfile returned non-OK status");
         /* Handle non-fatal errors */
       } 
-      logs(CHIME_INFO "finished upload procedure");
+      logs(CHIME_INFO "[file_transfer]: finished upload procedure");
       break;
     case DOWNLOAD:
-      if (recvheader(req->conn->transferfd, &req->finfo.header) != OK) {
-        logs(CHIME_WARN "recvheader returned non-OK status");
+      logs(CHIME_INFO "[file_transfer]: Sending file header...");
+      if (sendheader(req->conn->transferfd, &req->finfo.header) != OK) {
+        logs(CHIME_WARN "[file_transfer]: recvheader returned non-OK status");
         /* Handle non-fatal errors */
       }
+      logs(CHIME_INFO "[file_transfer]: Done.");
+      logs(CHIME_INFO "[file_transfer]: Downloading file...");
       if (downloadfile(req->conn->transferfd, req->finfo.fd, &req->finfo.header) != OK) {
-        logs(CHIME_WARN "downloadfile returned non-OK status");
+        logs(CHIME_WARN "[file_transfer]: downloadfile returned non-OK status");
       }
-      logs(CHIME_INFO "finished file download procedure");
+      logs(CHIME_INFO "[file_transfer]: finished file download procedure");
       break;
     case NOT_READY:
-      logs(CHIME_WARN "file_transfer called with NOT_READY file status. Exiting");
+      logs(CHIME_WARN "[file_transfer]: file_transfer called with NOT_READY file status. Exiting");
     default:
-      logs(CHIME_WARN "file_transfer called with invalid transfer status");
+      logs(CHIME_WARN "[file_transfer]: file_transfer called with invalid transfer status");
       break;
   }
   close(req->finfo.fd);
-  logs(CHIME_INFO "file_transfer thread exiting");
+  logs(CHIME_INFO "[file_transfer]: file_transfer thread exiting");
   return NULL;
 }
 
@@ -327,6 +332,7 @@ void *transfermanager(void *arg) {
     for (iterator = connections; !flag || iterator != connections; iterator = iterator->next) {
       flag |= iterator == connections;
       if (iterator->secret == received_secret) {
+        printf(CHIME_INFO "[transfermanager]: Found client with secret %ld's parent connection, %p and setting transferfd to %d\n", received_secret, iterator, newfd);
         iterator->transferfd = newfd; // this is so bad
         found = 1;
       }
@@ -340,6 +346,10 @@ void *transfermanager(void *arg) {
       continue;
     }
 
+    strcpy(response.txt, "OK");
+    response.flags = FCONNECT;
+    sendmessage(newfd, &response);
+
     transfer_conns[num_transfer_conns] = newfd;
     num_transfer_conns++;
   }
@@ -348,7 +358,7 @@ void *transfermanager(void *arg) {
 
 struct connection *find_conn_by_sfd(int sfd) {
   struct connection *iterator;
-  int flag;
+  int flag = 0;
   for (iterator = connections; !flag || iterator != connections; iterator = iterator->next) {
     flag |= iterator == connections;
     if (iterator->sfd == sfd) {
@@ -389,6 +399,10 @@ void *manager(void *arg) {
             request.finfo.status = DOWNLOAD;
             /* TODO make this O(1) */
             request.conn = find_conn_by_sfd(listener[i].fd);
+            if (!request.conn) {
+              logs(CHIME_WARN "[manager]: Could not find connection by sfd for file transfer. Aborting...");
+              continue; /* TODO Don't do this! */
+            }
 
             if (recvheader(listener[i].fd, &request.finfo.header) != OK) {
               /* Handle non-fatal errors */
