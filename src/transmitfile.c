@@ -143,27 +143,30 @@ STATUS downloadfile(int transferfd, int outfd, const struct fileheader *fi) {
   while (received < fi->size) {
     printf("file size: %ld, received bytes: %d\n", fi->size, received);
     int bufflen;
-    tmp = recv(transferfd, buff + received, min(sizeof(buff) - received, fi->size - received), 0);
-    if (tmp < 0 && errno != EINTR) {
+    tmp = recv(transferfd, buff + (received % sizeof(buff)), min(sizeof(buff) - received, fi->size - received), 0);
+    if (tmp < 0) {
+      if (errno == EINTR) continue;
       perror("recv");
       exit(EXIT_FAILURE); // TODO fatal?
     }
     if (tmp == 0) {
+      printf("[downloadfile]: recv returned 0; connection was closed\n");
       // TODO keep file or trash it if unfinished? Keep in cache and retry upload?
       return ERROR_CONNECTION_CLOSED;
     }
 
     received += tmp;
     bufflen = tmp;
-    while (written < bufflen) {
-      tmp = write(outfd, buff + written, bufflen - written);
-      if (tmp < 0 && errno != EINTR) {
+    while (written < received) {
+      tmp = write(outfd, buff + (written % sizeof(buff)), bufflen - (written % sizeof(buff)));
+      if (tmp < 0) {
+        if (errno == EINTR) continue;
         perror("write");
         exit(EXIT_FAILURE);
       }
-      if (tmp == 0) {
+      /*if (tmp == 0) {
         return ERROR_CONNECTION_CLOSED;
-      }
+      }*/
       written += tmp;
     }
   }
@@ -190,23 +193,24 @@ STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
   printf("uploadfile called with filefd: %d\n", filefd);
   char buff[FILEBUFF_LEN];
   int sent = 0, bread = 0, tmp;
+
+  /* Read from beginning of file TODO move offset back to this afterwards */
+  lseek(filefd, 0, SEEK_SET);
   while (bread < fi->size) {
     int bufflen;
-    tmp = read(filefd, buff + bread, min(sizeof(buff) - bread, fi->size - bread));
+    tmp = read(filefd, buff + (bread % sizeof(buff)), min(sizeof(buff) - (bread % sizeof(buff)), fi->size - bread));
     if (tmp < 0) {
       if (errno == EINTR) continue;
       // TODO make fatal() instead of manual exit
       perror("read");
       exit(EXIT_FAILURE);
     }
-    if (tmp == 0) {
-      return ERROR_INCOMPLETE_SEND;
-    }
+    
     bread += tmp;
     bufflen = tmp;
-    while (sent < bufflen) {
+    while (sent < bread) {
       printf("file size: %ld, bytes sent: %d\n", fi->size, sent);
-      tmp = send(transferfd, buff + sent, bufflen - sent, 0);
+      tmp = send(transferfd, buff + (sent % sizeof(buff)), bufflen - (sent % sizeof(buff)), 0);
       if (tmp < 0) {
         if (errno == EINTR) continue;
         // TODO fatal()
@@ -222,6 +226,6 @@ STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
       sent += tmp;
     }
   }
-  printf("leaving uploadfile. bytes left to send: %ld\n", fi->size - sent);
+  printf("leaving uploadfile. file size: %ld, bytes read: %d. bytes left to send: %ld\n", fi->size, bread, fi->size - sent);
   return OK;
 }
