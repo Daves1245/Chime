@@ -145,6 +145,11 @@ STATUS cmdparse(struct message *msg) {
           exit(EXIT_FAILURE); // XXX fatal?
         }
 
+        // Make sure arg is a file and not a directory. See  https://stackoverflow.com/questions/4553012/checking-if-a-file-is-a-directory-or-just-a-file
+        if (!S_ISDIR(st.st_mode)) {
+          fprintf(stderr, "Cannot upload a directory\n"); // TODO
+        }
+
         /* This shouldn't be necessary so far since one
          * thread stricly reads and the other strictly writes
          * but it's good practice and allows for later changes to
@@ -153,7 +158,7 @@ STATUS cmdparse(struct message *msg) {
         finfo.fd = fd;
         finfo.header.size = st.st_size;
         finfo.status = UPLOAD;
-        strcpy(finfo.header.filename, basename(filename)); // TODO only pass basename
+        strcpy(finfo.header.filename, basename(filename));
         pthread_mutex_unlock(&finfo_mutex);
 
         pthread_cond_broadcast(&file_ready);
