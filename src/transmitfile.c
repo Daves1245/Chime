@@ -79,7 +79,8 @@ STATUS sendheader(int transferfd, const struct fileheader *fi) {
 STATUS recvheader(int transferfd, struct fileheader *fi) {
   char buff[HEADERBUFF_LEN], *fieldp;
   int received = 0, tmp;
-  received = recv(transferfd, buff, sizeof buff, 0);
+  memset(buff, 0, sizeof buff);
+  received = recv(transferfd, buff, sizeof(buff), 0);
   printf("RECVHEADER: initial recv gave a buffer of - `%s`\n", buff);
   fieldp = strtok(buff, "\n");
   printf("RECVHEADER: initial strtok returned fieldp = `%s`\n", fieldp);
@@ -138,23 +139,19 @@ STATUS recvheader(int transferfd, struct fileheader *fi) {
  *      by fi->size. The resulting file may or may not be incomplete,
  */
 STATUS downloadfile(int transferfd, int outfd, const struct fileheader *fi) {
+  printf("downloadfile called with transferfd %d and outfd %d\n", transferfd, outfd);
   char buff[FILEBUFF_LEN];
   int received = 0, written = 0, tmp;
   while (received < fi->size) {
-    printf("file size: %ld, received bytes: %d\n", fi->size, received);
     int bufflen;
-    tmp = recv(transferfd, buff + (received % sizeof(buff)), min(sizeof(buff) - received, fi->size - received), 0);
+
+    printf("file size: %ld, received bytes: %d\n", fi->size, received);
+    tmp = recv(transferfd, buff + (received % sizeof(buff)), min(sizeof(buff) - (received % sizeof(buff)), fi->size - received), 0);
     if (tmp < 0) {
       if (errno == EINTR) continue;
       perror("recv");
       exit(EXIT_FAILURE); // TODO fatal?
     }
-    if (tmp == 0) {
-      printf("[downloadfile]: recv returned 0; connection was closed\n");
-      // TODO keep file or trash it if unfinished? Keep in cache and retry upload?
-      return ERROR_CONNECTION_CLOSED;
-    }
-
     received += tmp;
     bufflen = tmp;
     while (written < received) {
@@ -164,12 +161,15 @@ STATUS downloadfile(int transferfd, int outfd, const struct fileheader *fi) {
         perror("write");
         exit(EXIT_FAILURE);
       }
-      /*if (tmp == 0) {
-        return ERROR_CONNECTION_CLOSED;
-      }*/
       written += tmp;
     }
+
+    if (bufflen == 0) {
+      printf("leaving downloadfile. file size: %ld. bytes received: %d. bytes written: %d\n", fi->size, received, written);
+      return ERROR_CONNECTION_CLOSED;
+    }
   }
+  printf("finished downloadfile. file size: %ld. bytes received: %d. bytes written: %d\n", fi->size, received, written);
   return OK;
 }
 
@@ -205,7 +205,7 @@ STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
       perror("read");
       exit(EXIT_FAILURE);
     }
-    
+
     bread += tmp;
     bufflen = tmp;
     while (sent < bread) {
@@ -226,6 +226,6 @@ STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
       sent += tmp;
     }
   }
-  printf("leaving uploadfile. file size: %ld, bytes read: %d. bytes left to send: %ld\n", fi->size, bread, fi->size - sent);
+  printf("leaving uploadfile. file size: %ld, bytes read: %d. bytes sent: %d\n", fi->size, bread, sent);
   return OK;
 }

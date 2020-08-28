@@ -205,6 +205,13 @@ STATUS setup_p2p(struct p2p_request *req) {
 
 void *file_transfer(void *ftreq) {
   struct ftrequest *req = (struct ftrequest *) ftreq;
+  struct message response;
+
+  memset(&response, 0, sizeof response);
+  response.uid = response.id = 0;
+  timestampmessage(&response);
+  strcpy(response.from, "server");
+
   logs("[file_transfer]: started new thread. Received argument:");
   printf("sfd: %d\ntransferfd:%d\nhandle:%s\n", req->conn->sfd, req->conn->transferfd, req->conn->uinfo.handle);
 
@@ -222,7 +229,7 @@ void *file_transfer(void *ftreq) {
       if (uploadfile(req->conn->transferfd, req->finfo.fd, &req->finfo.header) != OK) {
         logs(CHIME_WARN "[file_transfer]: uploadfile returned non-OK status");
         /* Handle non-fatal errors */
-      } 
+      }
       logs(CHIME_INFO "[file_transfer]: finished upload procedure");
       break;
     case DOWNLOAD:
@@ -236,6 +243,9 @@ void *file_transfer(void *ftreq) {
       if (downloadfile(req->conn->transferfd, req->finfo.fd, &req->finfo.header) != OK) {
         logs(CHIME_WARN "[file_transfer]: downloadfile returned non-OK status");
       }
+      strcpy(response.txt, "OK");
+      response.flags = FMSG;
+      sendmessage(req->conn->transferfd, &response);
       logs(CHIME_INFO "[file_transfer]: finished file download procedure");
       break;
     case NOT_READY:

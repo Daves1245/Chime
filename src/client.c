@@ -349,14 +349,9 @@ void *filetransfer(void *pconn) {
   /* Sleep until signaled to upload or download a file, then set a status and
    * sleep again */
   while (running) {
-    printf("before lock\n");
     pthread_mutex_lock(&ft_wait_mutex);
-    printf("after lock\n");
     while (finfo.status == NOT_READY) {
-      printf("before wait\n");
       pthread_cond_wait(&file_ready, &ft_wait_mutex);
-      printf("after wait\n");
-      printf("status still not ready!\n");
     }
 
     struct fileheader header;
@@ -364,6 +359,7 @@ void *filetransfer(void *pconn) {
     printf("[THREAD filetransfer]: Awoken for file transfer\n");
     STATUS s1, s2;
     switch (finfo.status) {
+      struct message msg;
       case UPLOAD:
         printf("[THREAD filetransfer]: Beginning upload\n");
         s1 = recvheader(sockfd, &header);
@@ -380,6 +376,8 @@ void *filetransfer(void *pconn) {
           /* Handle non-fatal errors */
           printf("UPLOADFILE RETURNED NON-OK %d STATUS\n", s2);
         }
+        recvmessage(sockfd, &msg);
+        printf("Response from server: %s\n", msg.txt);
         break;
       case DOWNLOAD:
         pthread_mutex_lock(&finfo_mutex);

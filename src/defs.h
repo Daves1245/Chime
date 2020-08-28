@@ -13,7 +13,7 @@
 #define TIMESTAMP_LEN 20
 #define FILENAME_LEN 100
 #define FILEBUFF_LEN 1000 // TODO find optimization for this
-#define HEADERBUFF_LEN 200 // TODO optimize
+#define HEADERBUFF_LEN 150 // TODO optimize
 
 #define HASH_LEN 256 // length of hash
 
