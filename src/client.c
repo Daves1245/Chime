@@ -13,6 +13,7 @@
 #include <poll.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <libgen.h> // we want the POSIX version of basename because I hope TODO port to POSIX
 
 #include "signaling.h"
 #include "common.h"
@@ -152,7 +153,7 @@ STATUS cmdparse(struct message *msg) {
         finfo.fd = fd;
         finfo.header.size = st.st_size;
         finfo.status = UPLOAD;
-        strcpy(finfo.header.filename, filename); // TODO only pass basename
+        strcpy(finfo.header.filename, basename(filename)); // TODO only pass basename
         pthread_mutex_unlock(&finfo_mutex);
 
         pthread_cond_broadcast(&file_ready);
