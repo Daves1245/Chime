@@ -6,9 +6,11 @@
 #include <string.h>
 
 #include "connection.h"
-#include "transmitfile.h"
+#include "ftransfer.h"
 #include "defs.h"
 #include "math.h"
+
+// TODO use SOCK_SEQPACKET ? 
 
 /*
  * sendheader() - send a file header

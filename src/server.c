@@ -16,7 +16,7 @@
 #include <unistd.h>
 
 #include "colors.h"
-#include "common.h"
+#include "getinet.h"
 #include "message.h"
 #include "defs.h"
 #include "connection.h"
@@ -24,7 +24,7 @@
 #include "signaling.h"
 #include "logging.h"
 #include "fileheader.h"
-#include "transmitfile.h"
+#include "ftransfer.h"
 #include "math.h"
 #include "fileinfo.h"
 #include "secret.h"
@@ -204,7 +204,7 @@ STATUS setup_p2p(struct p2p_request *req) {
 }
 
 void *on_finish_do(void *arg) {
-
+  
 }
 
 void *file_transfer(void *ftreq) {
@@ -286,7 +286,7 @@ void *transfermanager(void *arg) {
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
 
-  if ((rv = getaddrinfo("127.0.0.1", "33402", &hints, &servinfo)) != 0) {
+  if ((rv = getaddrinfo(NULL, "33402", &hints, &servinfo)) != 0) {
     logs(CHIME_WARN "Could not set up file transfering thread\n");
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
     return NULL; // TODO proper return value
@@ -651,8 +651,8 @@ int main(int argc, char **argv) {
   /* Wait for managing thread to finish */
   pthread_join(managert, NULL);
   /* Disconnect and exit cleanly */
-  logs("Waiting for threads to finish...");
-  pthread_exit(NULL); // wait for all threads to finish
+  logs("Cancelling threads...");
+  pthread_cancel(transfert);
   logs("Disconnecting all users...");
   freeconnections(connections);
   logs("Done.");

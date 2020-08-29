@@ -16,13 +16,12 @@
 #include <libgen.h> // we want the POSIX version of basename because I hope TODO port to POSIX
 
 #include "signaling.h"
-#include "common.h"
+#include "getinet.h"
 #include "message.h"
 #include "colors.h"
 #include "defs.h"
-#include "threading.h"
 #include "transmitmsg.h"
-#include "transmitfile.h"
+#include "ftransfer.h"
 #include "fileheader.h"
 #include "fileinfo.h"
 #include "secret.h"
@@ -250,7 +249,7 @@ void *thread_send(void *pconn) {
   // pack msg with user info and send to server
   memset(&msg, 0, sizeof msg);
   makemessage(&conn->uinfo, &msg);
-  strcpy(msg.txt, " "); // TODO fix the 'empty text field' bug
+  strcpy(msg.txt, " ");
   msg.flags = FCONNECT;
   sendmessage(conn->sfd, &msg);
   msg.flags = FMSG;

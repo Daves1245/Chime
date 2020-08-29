@@ -15,8 +15,6 @@
 
 /***********
  * XXX
- * - user profiles 
- * - timestamp messages 
  * - implement message hashing
  * - chat storing (locally and server side)
  * - more user commands
