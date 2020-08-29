@@ -94,7 +94,7 @@ STATUS packmessage(struct message *msg) {
 }
 
 // XXX move src/threading.h into here 
-// XXX if (messagetype == FUPLOAD) set fh accordingly
+// XXX if (messagetype == FTRANSFER) set fh accordingly
 // and
 //  pthread_cond_broadcast(&file_ready)
 // this should let thread filetransfer upload/download the 
@@ -132,7 +132,7 @@ STATUS cmdparse(struct message *msg) {
       if (filename) {
         struct stat st;
         int fd;
-        msg->flags = FUPLOAD;
+        msg->flags = FTRANSFER;
         while ((fd = open(filename, O_RDONLY)) == -1 && errno == EINTR);
         if (fd < 0 ) {
           fprintf(stderr, RED "File path must be valid\n" ANSI_RESET);
@@ -269,7 +269,7 @@ void *thread_send(void *pconn) {
         printf("sendmessage returned non-OK or DISCONNECT status. Exiting...\n");
         connected = 0;
       }
-      if (msg.flags == FUPLOAD) {
+      if (msg.flags == FTRANSFER) {
         if (finfo.status != UPLOAD) {
           printf("[thread_send]: FILE HAS NOT BEEN SET TO READY FOR UPLOAD. ABORTING.\n");
           continue;
@@ -285,6 +285,7 @@ void *thread_send(void *pconn) {
   return NULL;
 }
 
+// TODO change from connection to file info like in server.
 void *filetransfer(void *pconn) {
   struct connection *conn = (struct connection *) pconn;
   int sockfd;

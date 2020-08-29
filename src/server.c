@@ -203,14 +203,20 @@ STATUS setup_p2p(struct p2p_request *req) {
   return OK;
 }
 
+void *on_finish_do(void *arg) {
+
+}
+
 void *file_transfer(void *ftreq) {
   struct ftrequest *req = (struct ftrequest *) ftreq;
+  struct fileheader header;
   struct message response;
 
   memset(&response, 0, sizeof response);
   response.uid = response.id = 0;
   timestampmessage(&response);
   strcpy(response.from, "server");
+  response.flags = FMSG;
 
   logs("[file_transfer]: started new thread. Received argument:");
   printf("sfd: %d\ntransferfd:%d\nhandle:%s\n", req->conn->sfd, req->conn->transferfd, req->conn->uinfo.handle);
@@ -222,9 +228,18 @@ void *file_transfer(void *ftreq) {
 
   switch (req->finfo.status) {
     case UPLOAD:
-      if (recvheader(req->conn->transferfd, &req->finfo.header) != OK) {
+      if (recvheader(req->conn->transferfd, &header) != OK) {
         logs(CHIME_WARN "[file_transfer]: recvheader returned non-OK status");
         /* Handle non-fatal errors */
+      }
+      if (strcmp(req->finfo.header.filename, header.filename) != 0 || header.size != req->finfo.header.size) {
+        logs(CHIME_WARN "[file_transfer]: WARNING: received header from client differs from local header!");
+        /* TODO print header info */
+        strcpy(response.txt, "NO"); // be forceful
+        sendmessage(req->conn->transferfd, &response);
+      } else {
+        strcpy(response.txt, "OK");
+        sendmessage(req->conn->transferfd, &response);
       }
       if (uploadfile(req->conn->transferfd, req->finfo.fd, &req->finfo.header) != OK) {
         logs(CHIME_WARN "[file_transfer]: uploadfile returned non-OK status");
@@ -244,7 +259,6 @@ void *file_transfer(void *ftreq) {
         logs(CHIME_WARN "[file_transfer]: downloadfile returned non-OK status");
       }
       strcpy(response.txt, "OK");
-      response.flags = FMSG;
       sendmessage(req->conn->transferfd, &response);
       logs(CHIME_INFO "[file_transfer]: finished file download procedure");
       break;
@@ -266,7 +280,6 @@ void *transfermanager(void *arg) {
   struct sockaddr_storage their_addr;
   socklen_t sin_size;
   int yes = 1;
-  int running = 1;
 
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;
@@ -397,7 +410,7 @@ void *manager(void *arg) {
         char logbuff[LOGBUFF_STR_LEN + MAX_TEXT_LEN];
         if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
           recvmessage(listener[i].fd, &m);
-          if (m.flags == FUPLOAD) {
+          if (m.flags == FTRANSFER) {
             pthread_t ftransferinstance; 
             struct message response;
             struct ftrequest request;
@@ -416,7 +429,7 @@ void *manager(void *arg) {
 
             if (recvheader(listener[i].fd, &request.finfo.header) != OK) {
               /* Handle non-fatal errors */
-              logs(CHIME_WARN "recvheader after FUPLOAD request returned non-OK status");
+              logs(CHIME_WARN "recvheader after FTRANSFER request returned non-OK status");
             }
 
             /* TODO fix impending duplicate-name bug */
@@ -433,6 +446,7 @@ void *manager(void *arg) {
             } else {
               logs(CHIME_INFO "File transfer thread created successfully");
             }
+            continue;
           }
           /* Connect a new user */
           if (m.flags == FCONNECT) {
@@ -637,6 +651,8 @@ int main(int argc, char **argv) {
   /* Wait for managing thread to finish */
   pthread_join(managert, NULL);
   /* Disconnect and exit cleanly */
+  logs("Waiting for threads to finish...");
+  pthread_exit(NULL); // wait for all threads to finish
   logs("Disconnecting all users...");
   freeconnections(connections);
   logs("Done.");
