@@ -30,6 +30,9 @@ pthread_cond_t file_ready = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t finfo_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t ft_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+int upload_dir_fd = -1;
+int download_dir_fd = -1;
+
 void (*last_action)();
 void do_nothing(void) {}
 void finally() {
@@ -235,7 +238,6 @@ status request_transfer(struct ftrequest *request) {
   if (pthread_detach(id)) {
     printf("[request_transfer]: thread created for file transfer is not joinable\n");
   }
-  free(request);
   return OK;
 }
 
@@ -293,6 +295,12 @@ status execute_commands(struct connection *conn, struct message *msg) {
   return OK;
 }
 
+void init(void) {
+  mkdir("downloads", MODE);
+  download_dir_fd = open("downloads", O_DIRECTORY);
+  last_action = do_nothing;
+}
+
 // XXX status login(struct connection *conn) {}
 
 /*
@@ -329,7 +337,7 @@ int main(int argc, char **argv) {
     ftport = argv[3];
   }
 
-  last_action = do_nothing;
+  init();
 
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;

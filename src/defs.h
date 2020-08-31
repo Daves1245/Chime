@@ -34,6 +34,12 @@
 #define FTRANSFER 0x3
 #define ECONNDROPPED 0x4
 
+/* File defaults */
+//#define MODE 0666 /* Mode to open/store files */
+//#define MODE 0644
+#define DIR_MODE 0740
+#define MODE 0640
+
 /* Errors */
 #define ECONNCLSD -1 
 

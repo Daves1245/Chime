@@ -33,7 +33,6 @@
 
 #define PORT "33401"
 #define BACKLOG 10
-#define MODE 0666 // TODO mv to defs
 
 #define UPTIME_STR_LEN 10
 #define LOGBUFF_STR_LEN 100
@@ -51,6 +50,7 @@ struct p2p_info {
 
 FILE *outputstream;
 int upload_dir_fd = -1;
+int download_dir_fd = -1;
 
 int transfer_conns_arr[BACKLOG];
 int *transfer_conns;
@@ -413,36 +413,21 @@ void *manager(void *arg) {
         if (listener[i].fd > 0 && listener[i].revents == POLLIN) {
           recvmessage(listener[i].fd, &m);
           if (m.flags == FTRANSFER) {
-            pthread_t ftransferinstance; 
+            pthread_t up_handleid; 
             struct message response;
-            struct ftrequest request;
+            struct connection *connp;
 
             logs(CHIME_INFO "Received upload request\n");
             memset(&response, 0, sizeof response);
-            memset(&request, 0, sizeof request);
 
-            request.finfo.status = DOWNLOAD;
             /* TODO make this O(1) */
-            request.conn = find_conn_by_sfd(listener[i].fd);
-            if (!request.conn) {
-              logs(CHIME_WARN "[manager]: Could not find connection by sfd for file transfer. Aborting...");
+            connp = find_conn_by_sfd(listener[i].fd);
+            if (!connp) {
+              logs(CHIME_WARN "[manager]: Could not find connection by sfd for file transfer. Aborting upload");
               continue; /* TODO Don't do this! */
             }
 
-            if (recvheader(listener[i].fd, &request.finfo.header) != OK) {
-              /* Handle non-fatal errors */
-              logs(CHIME_WARN "recvheader after FTRANSFER request returned non-OK status");
-            }
-
-            /* TODO fix impending duplicate-name bug */
-            while ((request.finfo.fd = openat(upload_dir_fd, request.finfo.header.filename, O_CREAT | O_WRONLY, MODE)) == -1 && errno == EINTR);
-            if (request.finfo.fd < 0) {
-              logs(CHIME_WARN "Could not create a file for file transfer");
-              perror("write");
-              return NULL;
-            }
-
-            if (pthread_create(&ftransferinstance, NULL, file_transfer, &request)) {
+            if (pthread_create(&up_handleid, NULL, handle_upload_request, connp)) {
               logs(CHIME_WARN "could not create thread for handling file transfer");
               perror("pthread_create");
             } else {
@@ -520,8 +505,11 @@ void init(void) {
   srand(time(NULL));
   transfer_conns = transfer_conns_arr;
 
-  mkdir("uploads", MODE);
+  mkdir("uploads", DIR_MODE);
   upload_dir_fd = open("uploads", O_DIRECTORY);
+  if (upload_dir_fd < 0) {
+    logs(CHIME_WARN "Failed to create uploads directory\n");
+  }
 }
 
 

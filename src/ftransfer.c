@@ -18,6 +18,9 @@
 
 // TODO use SOCK_SEQPACKET ? 
 
+extern int upload_dir_fd;
+extern int download_dir_fd;
+
 /*
  * sendheader() - send a file header
  * @transferfd: socket file descriptor to send
@@ -286,36 +289,59 @@ status create_upload_request(struct ftrequest **dest, char *filepath) {
   return OK;
 }
 
-status handle_upload_request(struct connection *conn) {
+void *handle_upload_request(void *connp) {
+  struct connection *conn;
   struct ftrequest request;
-  int fd;
+  struct message response;
+
+  conn = (struct connection *) connp;
+  if (!conn) {
+    fprintf(stderr, "[handle_upload_request]: Received invalid arguments! Aborting transfer\n");
+    return NULL;
+  }
+
+  memset(&response, 0, sizeof response);
+  response.uid = response.id = 0;
+  strcpy(response.from, " ");
+  timestampmessage(&response);
+  response.flags = FMSG;
 
   if (recvheader(conn->transferfd, &request.finfo.header) != OK) {
-    fprintf(stderr, "(handle_upload_request): recvheader returned non-OK status\n");
+    fprintf(stderr, "[handle_upload_request]: recvheader returned non-OK status\n");
   }
 
-  if ((request.finfo.fd = open(request.finfo.header.filename, O_CREAT | O_WRONLY)) < 0) {
+  // TODO check data
+
+  printf("download_dir_fd: %d\n", download_dir_fd);
+  if ((request.finfo.fd = openat(upload_dir_fd, request.finfo.header.filename, O_CREAT | O_WRONLY, MODE)) < 0) {
+    printf("[handle_upload_request]: Could not open new file in downloads directory\n");
     perror("open");
   }
 
-  if ((fd = open(request.finfo.header.filename, O_CREAT | O_WRONLY)) < 0) {
-    if (errno == EINTR) return ERROR_INTERRUPTED;
-    perror("open");
-    return ERROR_FAILED_SYSCALL;
+  strcpy(response.txt, "OK");
+  sendmessage(conn->transferfd, &response);
+
+  if (downloadfile(conn->transferfd, request.finfo.fd, &request.finfo.header) != OK) {
+    fprintf(stderr, "[handle_upload_request]: downloadfile returned non-OK status\n");
   }
 
-  if (downloadfile(conn->transferfd, fd, &request.finfo.header) != OK) {
-    fprintf(stderr, "(handle_upload_request): downloadfile returned non-OK status\n");
-  }
-
-  return OK;
+  return NULL;
 }
 
 void *filetransfer(void *request) {
   struct ftrequest *req = (struct ftrequest *) request;
   struct message msg;
 
-  printf("filetransfer called with conn: %p", (struct connection *) req->conn);
+  if (!req->conn) {
+    printf("filetransfer must be called with an initialized member connection!\n");
+    return NULL;
+  }
+
+  memset(&msg, 0, sizeof msg);
+  msg.id = msg.uid = 0;
+  strcpy(msg.from, " ");
+  timestampmessage(&msg);
+  msg.flags = FMSG;
 
   switch (req->finfo.status) {
     case UPLOAD:
@@ -325,6 +351,8 @@ void *filetransfer(void *request) {
       if (sendheader(req->conn->transferfd, &req->finfo.header) != OK) {
         printf("SENDHEADER RETURNED NON-OK STATUS\n");
       }
+      recvmessage(req->conn->transferfd, &msg);
+      printf("[filetransfer]: Response: %s\n", msg.txt);
       printf("AFTER SH CONN IS %p\n", req->conn);
       printf("[filetransfer]: done\n");
       printf("[filetransfer]: sending file...\n");
@@ -340,6 +368,8 @@ void *filetransfer(void *request) {
       if (recvheader(req->conn->transferfd, &req->finfo.header) != OK) {
         printf("RECVHEADER RETURNED NON-OK STATUS\n");
       }
+      strcpy(msg.txt, "OK");
+      sendmessage(req->conn->transferfd, &msg);
       printf("[filetransfer]: done\n"); 
       printf("[filetransfer]: downloading file...\n");
       if (downloadfile(req->conn->transferfd, req->finfo.fd, &req->finfo.header) != OK) {
