@@ -11,12 +11,12 @@
 #include "message.h"
 #include "connection.h"
 
-STATUS recvmessage_conn(const struct connection *conn, struct message *msg);                  /* Receive a message coming in from sfd */
-STATUS sendmessage_conn(const struct connection *conn, const struct message *msg);            /* Unpack a message, send it through fd */
-STATUS recvmessage(int sfd, struct message *msg);
-STATUS sendmessage(int sfd, const struct message *msg);
-STATUS makemessage(const struct user *usr, struct message *msg);   /* Put user and other information in a message */
-STATUS packmessage(struct message *msg);                           /* Pack msg with appropriate info */
-STATUS cmdparse(struct message *msg);
+status recvmessage_conn(const struct connection *conn, struct message *msg);                  /* Receive a message coming in from sfd */
+status sendmessage_conn(const struct connection *conn, const struct message *msg);            /* Unpack a message, send it through fd */
+status recvmessage(int sfd, struct message *msg);
+status sendmessage(int sfd, const struct message *msg);
+status makemessage(const struct user *usr, struct message *msg);   /* Put user and other information in a message */
+status packmessage(struct message *msg);                           /* Pack msg with appropriate info */
+status cmdparse(struct message *msg);
 
 #endif

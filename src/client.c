@@ -13,7 +13,6 @@
 #include <poll.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <libgen.h> // we want the POSIX version of basename because I hope TODO port to POSIX
 
 #include "signaling.h"
 #include "getinet.h"
@@ -25,29 +24,48 @@
 #include "fileheader.h"
 #include "fileinfo.h"
 #include "secret.h"
-
-#define LOCALHOST "127.0.0.1"
-#define PORT "33401"
-#define MAXDATASIZE 100
+#include "ftrequest.h"
 
 pthread_cond_t file_ready = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t finfo_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t ft_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-pthread_cond_t received_secret = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t secret_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-void (*finally)();
+void (*last_action)();
 void do_nothing(void) {}
+void finally() {
+  last_action();
+  last_action = do_nothing;
+}
+
+status execute_commands(struct connection *, struct message *);
 
 void notify_transfer(void) {
   pthread_cond_broadcast(&file_ready);
-  finally = do_nothing;
+  last_action = do_nothing;
 }
 
 struct fileinfo finfo;
 int running = 1;
 long secret;
+
+status handshake(int tsfd, long secret) {
+  struct message msg;
+  printf("[handshake]: attempting handshake\n");
+  memset(&msg, 0, sizeof msg);
+  msg.uid = msg.id = 0;
+  strcpy(msg.from, " ");
+  sprintf(msg.txt, "%ld\n", secret);
+  msg.flags = FCONNECT;
+  sendmessage(tsfd, &msg);
+  recvmessage(tsfd, &msg);
+  if (msg.flags == FDISCONNECT) {
+    fprintf(stderr, "[handshake]: invalid secret, ft connection refused by server\n");
+    return ERROR_CONNECTION_DROPPED;
+  } else {
+    printf("[handshake]: handshake successful\n");
+    return OK;
+  }
+}
 
 /*
  * TODO the name packmessage should 
@@ -65,7 +83,7 @@ long secret;
  *
  * Return: OK on success
  */
-STATUS packmessage(struct message *msg) {
+status packmessage(struct message *msg) {
   msg->flags = FMSG;
   char *txt = fgets(msg->txt, MAX_TEXT_LEN + 1, stdin);
   if (!txt) {
@@ -85,9 +103,6 @@ STATUS packmessage(struct message *msg) {
   if (*msg->txt == '\n') {
     strcpy(msg->txt, " ");
   }
-  if (*msg->txt == '/') {
-    cmdparse(msg);
-  }
   timestampmessage(msg);
   return OK;
 }
@@ -97,80 +112,6 @@ STATUS packmessage(struct message *msg) {
 // and
 //  pthread_cond_broadcast(&file_ready)
 // this should let thread filetransfer upload/download the 
-// necessary file and then sleep again
-
-/*
- * name: cmdparse
- * params: message pointer msg
- *
- * Performs the necessary action that
- * the command in msg specifies
- */
-STATUS cmdparse(struct message *msg) {
-  if (*msg->txt != '/') {
-    return OK; // not a command
-  }
-  char *tmp, buff[MAX_TEXT_LEN + 1];
-  strcpy(buff, msg->txt + 1);
-  tmp = strtok(buff, " ");
-  /* Commands with no arguments */
-  if (!tmp) {
-    if (strcmp(buff, "exit\n") == 0) {
-      printf("DISCONNECTING\n");
-      msg->flags = FDISCONNECT;
-      return OK;
-    }
-    /* Commands with arguments */
-  } else {
-    if (strcmp(buff, "upload") == 0) {
-      char *filename;
-
-      filename = strtok(NULL, " ");
-      filename[strcspn(filename, "\r\n")] = '\0';
-
-      if (filename) {
-        struct stat st;
-        int fd;
-        msg->flags = FTRANSFER;
-        while ((fd = open(filename, O_RDONLY)) == -1 && errno == EINTR);
-        if (fd < 0 ) {
-          fprintf(stderr, RED "File path must be valid\n" ANSI_RESET);
-          perror("open");
-          return ERROR_INVALID_FILEPATH;
-        }
-        if (stat(filename, &st) != 0) {
-          fprintf(stderr, "Could not stat file\n");
-          perror("stat");
-          exit(EXIT_FAILURE); // XXX fatal?
-        }
-
-        // Make sure arg is a file and not a directory. See  https://stackoverflow.com/questions/4553012/checking-if-a-file-is-a-directory-or-just-a-file
-        if (!S_ISDIR(st.st_mode)) {
-          fprintf(stderr, "Cannot upload a directory\n"); // TODO
-        }
-
-        /* This shouldn't be necessary so far since one
-         * thread stricly reads and the other strictly writes
-         * but it's good practice and allows for later changes to
-         * be made easily */
-        pthread_mutex_lock(&finfo_mutex);
-        finfo.fd = fd;
-        finfo.header.size = st.st_size;
-        finfo.status = UPLOAD;
-        strcpy(finfo.header.filename, basename(filename));
-        pthread_mutex_unlock(&finfo_mutex);
-
-        pthread_cond_broadcast(&file_ready);
-        printf("[thread_send]: set finfo.fd to %d\n", finfo.fd);
-        printf("[thread_send]: (cmdparse): I just broadcasted file_ready. filetransfer should be waking up now.\n");
-      } else {
-        printf("usage: /upload [filename]\n");
-      }
-    }
-  }
-  return OK;
-}
-
 
 /*
  * sa_handle() - Catch SIGINT and SIGTERM and disconnect from
@@ -193,14 +134,13 @@ void sa_handle(int signal, siginfo_t *info, void *ucontext) {
 void *thread_recv(void *pconn) {
   struct connection *conn = (struct connection *) pconn;
   struct message msg;
-  STATUS s;
+  status s;
 
   memset(&msg, 0, sizeof msg);
   recvmessage(conn->sfd, &msg);
-  debugmessage(&msg);
   secret = atol(msg.txt);
 
-  pthread_cond_broadcast(&received_secret);
+  handshake(conn->transferfd, secret);
 
   while (connected) {
     s = recvmessage(conn->sfd, &msg);
@@ -245,6 +185,7 @@ void *thread_recv(void *pconn) {
 void *thread_send(void *pconn) {
   struct connection *conn = (struct connection *) pconn;
   struct message msg;
+  struct pollfd listener;
 
   // pack msg with user info and send to server
   memset(&msg, 0, sizeof msg);
@@ -254,7 +195,6 @@ void *thread_send(void *pconn) {
   sendmessage(conn->sfd, &msg);
   msg.flags = FMSG;
 
-  struct pollfd listener;
   listener.fd = 0; // poll for stdin
   listener.events = POLLIN; // wait till we have input
 
@@ -262,20 +202,12 @@ void *thread_send(void *pconn) {
     if (poll(&listener, 1, POLL_TIMEOUT) && listener.revents == POLLIN) {
       /* XXX Grab input, check for exit */
       packmessage(&msg);
+      execute_commands(conn, &msg);
       msg.id++;
-      STATUS s = sendmessage(conn->sfd, &msg);
+      status s = sendmessage(conn->sfd, &msg);
       if (s != OK || msg.flags == FDISCONNECT) {
         printf("sendmessage returned non-OK or DISCONNECT status. Exiting...\n");
         connected = 0;
-      }
-      if (msg.flags == FTRANSFER) {
-        if (finfo.status != UPLOAD) {
-          printf("[thread_send]: FILE HAS NOT BEEN SET TO READY FOR UPLOAD. ABORTING.\n");
-          continue;
-        }
-        if (sendheader(conn->sfd, &finfo.header) != OK) {
-          printf("[thread_send]: sendheader returned non-OK status!\n");
-        }
       }
       finally();
     }
@@ -284,128 +216,81 @@ void *thread_send(void *pconn) {
   return NULL;
 }
 
-// TODO change from connection to file info like in server.
-void *filetransfer(void *pconn) {
-  struct connection *conn = (struct connection *) pconn;
-  int sockfd;
-  char *hostname = "127.0.0.1"; // XXX
-  char *port = "33402";
-  struct addrinfo hints, *servinfo, *p;
-  int rv;
+status request_transfer(struct ftrequest *request) {
+  pthread_t id;
+  printf("inside request_transfer conn is %p\n", request->conn);
+  if (!request) {
+#ifdef DEBUG
+    printf("request_transfer called with NULL argument!\n");
+#endif
+    return ERROR_INVALID_ARGUMENTS;
+  }
+  if (pthread_create(&id, NULL, filetransfer, request)) {
+    perror("pthread_create");
+    return ERROR_FAILED_SYSCALL;
+  }
+#ifdef DEBUG
+  printf("[request_transfer]: pthread created with id %ld\n", id);
+#endif
+  if (pthread_detach(id)) {
+    printf("[request_transfer]: thread created for file transfer is not joinable\n");
+  }
+  free(request);
+  return OK;
+}
 
-  memset(&hints, 0, sizeof hints);
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  if ((rv = getaddrinfo(hostname, port, &hints, &servinfo)) != 0) {
-    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-    return NULL;
-  } 
-  for (p = servinfo; p; p = p->ai_next) {
-    printf("trying\n");
-    if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-      perror("socket");
-      continue;
+// necessary file and then sleep again
+
+/*
+ * name: cmdparse
+ * params: message pointer msg
+ *
+ * Performs the necessary action that
+ * the command in msg specifies
+ */
+status execute_commands(struct connection *conn, struct message *msg) {
+  char *tmp, buff[MAX_TEXT_LEN + 1];
+
+  msg->flags = FMSG;
+  if (*msg->txt != '/') {
+    printf("not a command!\n");
+    return OK; // not a command
+  }
+  strcpy(buff, msg->txt + 1);
+  tmp = strtok(buff, " ");
+  /* Commands with no arguments */
+  if (!tmp) {
+    if (strcmp(buff, "exit\n") == 0) {
+      printf("DISCONNECTING\n");
+      msg->flags = FDISCONNECT;
+      return OK;
     }
-    if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-      close(sockfd);
-      perror("connect:");
-    }
-    break;
-  }
-
-  if (!p) {
-    fprintf(stderr, "Could not connect to transfer port\n");
-    return NULL;
-  }
-
-  conn->transferfd = sockfd;
-
-  printf("[THREAD filetransfer]: Successfully connected to %s. Sleeping until received secret...\n", port);
-
-  /* Not entirely sure how to use pthread conditional wait.
-   * I decided to use this over while (!secret) {} because the
-   * latter would waste cpu cycles. Hopefully I'm using this
-   * correctly */
-  pthread_mutex_lock(&secret_mutex);
-  while (!secret) {
-    pthread_cond_wait(&received_secret, &secret_mutex);
-  }
-  pthread_mutex_unlock(&secret_mutex);
-
-  printf("[THREAD filetransfer]: Woken up. Now attempting handshake\n");
-
-  struct message request;
-  memset(&request, 0, sizeof request);
-  request.uid = request.id = 0;
-  strcpy(request.from, " ");
-  sprintf(request.txt, "%ld\n", secret);
-  request.flags = FCONNECT;
-  printf("[THREAD filetransfer]: starting handshake\n");
-  sendmessage(sockfd, &request);
-  recvmessage(sockfd, &request);
-  if (request.flags == FDISCONNECT) {
-    fprintf(stderr, "[THREAD filetransfer] invalid secret, connection was closed by server\n");
-    return NULL;
+    /* Commands with arguments */
   } else {
-    printf("[THREAD filetransfer]: Successfull secret handshake\n");
-  }
+    if (strcmp(buff, "upload") == 0) {
+      char *filename;
 
-  printf("[THREAD filetransfer]: handshake successfull\n");
-  printf("[THREAD filetransfer]: Going to sleep until woken to send a file...\n");
-  /* Sleep until signaled to upload or download a file, then set a status and
-   * sleep again */
-  while (running) {
-    pthread_mutex_lock(&ft_wait_mutex);
-    while (finfo.status == NOT_READY) {
-      pthread_cond_wait(&file_ready, &ft_wait_mutex);
+      filename = strtok(NULL, " ");
+      filename[strcspn(filename, "\r\n")] = '\0';
+
+      if (filename) {
+        struct ftrequest *upload_request;
+        if (create_upload_request(&upload_request, filename) != OK) {
+          fprintf(stderr, "Could not create upload request\n");
+          return OK;
+        }
+        printf("CONN IS %p\n", conn);
+        upload_request->conn = conn;
+        msg->flags = FTRANSFER;
+        if (request_transfer(upload_request) != OK) {
+          fprintf(stderr, "Upload request returned non-OK status\n");
+        }
+      } else {
+        printf("usage: /upload [filename]\n");
+      }
     }
-
-    struct fileheader header;
-
-    printf("[THREAD filetransfer]: Awoken for file transfer\n");
-    STATUS s1, s2;
-    switch (finfo.status) {
-      struct message msg;
-      case UPLOAD:
-        printf("[THREAD filetransfer]: Beginning upload\n");
-        s1 = recvheader(sockfd, &header);
-        if (s1 != OK) {
-          printf("SENDHEADER RETURNED NON-OK %d STATUS\n", s1);
-        }
-        if (strcmp(header.filename, finfo.header.filename) != 0 || header.size != finfo.header.size) {
-          printf("[filetransfer]: Received header differs from local header!\n");
-        }
-        printf("[filetransfer]: uploading file...\n");
-        printf("sending uploadfile a filefd of %d\n", finfo.fd);
-        s2 = uploadfile(finfo.fd, sockfd, &finfo.header);
-        if (s2 != OK) {
-          /* Handle non-fatal errors */
-          printf("UPLOADFILE RETURNED NON-OK %d STATUS\n", s2);
-        }
-        recvmessage(sockfd, &msg);
-        printf("Response from server: %s\n", msg.txt);
-        break;
-      case DOWNLOAD:
-        pthread_mutex_lock(&finfo_mutex);
-        s1 = recvheader(sockfd, &finfo.header);
-        pthread_mutex_unlock(&finfo_mutex);
-        if (s1 != OK) {
-          /* Handle non-fatal errors */
-        }
-        s2 = downloadfile(sockfd, finfo.fd, &finfo.header);
-        break;
-      case NOT_READY:
-        fprintf(stderr, "File thread awoken when file not ready to be handled\n");
-        return NULL; // TODO fatal?
-        break;
-      default:
-        /* fprintf(stderr, "[filemanager]: Unrecognized option") */
-        break;
-    }
-    finfo.status = NOT_READY;
-    pthread_mutex_unlock(&ft_wait_mutex);
   }
-  return NULL;
+  return OK;
 }
 
 // XXX status login(struct connection *conn) {}
@@ -417,8 +302,8 @@ void *filetransfer(void *pconn) {
  * gracefully on exit.
  */
 int main(int argc, char **argv) {
-  int sockfd;
-  char *port;
+  int sockfd, transferfd;
+  char *port, *ftport;
   struct addrinfo hints, *servinfo, *p;
   int rv;
   char serverip[INET6_ADDRSTRLEN];
@@ -427,10 +312,10 @@ int main(int argc, char **argv) {
   int res;
   pthread_t sendertid;
   pthread_t receivertid;
-  pthread_t filetransferid;
   struct connection conn;
 
   port = PORT;
+  ftport = FTPORT;
 
   if (argc > 1) {
     hostname = argv[1];
@@ -440,7 +325,11 @@ int main(int argc, char **argv) {
     port = argv[2];
   }
 
-  finally = do_nothing;
+  if (argc > 3) {
+    ftport = argv[3];
+  }
+
+  last_action = do_nothing;
 
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;
@@ -474,10 +363,34 @@ int main(int argc, char **argv) {
   printf(GREEN "Connected to %s\n" ANSI_RESET, serverip);
   freeaddrinfo(servinfo); // all done with this structure 
 
+  /* Connect for file transfer */
+  if ((rv = getaddrinfo(hostname, ftport, &hints, &servinfo)) != 0) {
+    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+    exit(EXIT_FAILURE);
+  }
+  for (p = servinfo; p; p = p->ai_next) {
+    if ((transferfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+      perror("socket");
+      continue;
+    }
+    if (connect(transferfd, p->ai_addr, p->ai_addrlen) == -1) {
+      close(transferfd);
+      perror("connect");
+    }
+    break;
+  }
+
+  if (!p) {
+    fprintf(stderr, "Could not connect to file transfer port.\n");
+  }
+  conn.transferfd = transferfd;
+  freeaddrinfo(servinfo);
+
   /* Implement signal handling */
   s_act.sa_sigaction = sa_handle;
   s_act.sa_flags = SA_SIGINFO;
   res = sigaction(SIGTERM, &s_act, &s_oldact);
+
   if (res != 0) {
     perror("sigaction");
   }
@@ -502,12 +415,6 @@ int main(int argc, char **argv) {
   if (pthread_create(&receivertid, NULL, thread_recv, &conn)) {
     fprintf(stderr, "Could not create msg receiving thread\n");
     perror("pthread_create");
-    exit(EXIT_FAILURE);
-  }
-
-  if (pthread_create(&filetransferid, NULL, filetransfer, &conn)) {
-    fprintf(stderr, "Could not create filetransfer thread\n");
-    perror("pthread_crete");
     exit(EXIT_FAILURE);
   }
 

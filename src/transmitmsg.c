@@ -28,7 +28,7 @@ extern volatile sig_atomic_t connected;
  ***********/
 
 // hint - it's in another file!
-extern STATUS uploadfile(struct connection *conn, int fd);
+extern status uploadfile(struct connection *conn, int fd);
 
 /*
  * receive_wrapper() - wrapper for grabbing fields in recvmessage
@@ -73,7 +73,7 @@ size_t receive_wrapper(int sfd, void *buff, size_t size, char **field) {
  *
  * Return: OK on success.
  */
-STATUS recvmessage(int sfd, struct message *msg) {
+status recvmessage(int sfd, struct message *msg) {
   char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 4] = { 0 };
   size_t bread;
   char *tmp = NULL;
@@ -147,7 +147,7 @@ STATUS recvmessage(int sfd, struct message *msg) {
  *                              the client should be logged out and removed from the 
  *                              poll query.
  */
-STATUS sendmessage(int sfd, const struct message *msg) {
+status sendmessage(int sfd, const struct message *msg) {
   /* One buffer large enough to store each field - and their respective null byte */
   char buff[UINT64_BASE10_LEN + UINT32_BASE10_LEN + HANDLE_LEN + MAX_TEXT_LEN + UINT32_BASE10_LEN + 5];
   memset(buff, 0, sizeof buff);

@@ -22,7 +22,7 @@ struct connection {
     struct connection *next, *prev; /* Make this a linked list */
 };
 
-STATUS chime_connect(struct connection *conn);
+status chime_connect(struct connection *conn);
 
 // TODO use the full extent of the connection wrapper
 void disconnect(struct connection *conn);

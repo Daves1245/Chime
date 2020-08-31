@@ -46,7 +46,7 @@ void showmessage(const struct message *msg) {
  *
  * Return: OK on success
  */
-STATUS timestampmessage(struct message *msg) {
+status timestampmessage(struct message *msg) {
   time_t rtime;
   struct tm *now;
   time(&rtime);
@@ -69,7 +69,7 @@ STATUS timestampmessage(struct message *msg) {
  *
  * Return: OK on success
  */
-STATUS makemessage(const struct user *usr, struct message *msg) {
+status makemessage(const struct user *usr, struct message *msg) {
   msg->uid = usr->uid;
   strcpy(msg->from, usr->handle);
   return OK;

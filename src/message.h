@@ -21,6 +21,6 @@ void hashmsg(struct message *msg, char *res);                   /* Hash a messag
 void timestamp(struct message *m);                              /* XXX - Timestamp a message */
 void showmessage(const struct message *msg);                    /* Display a message to the screen */
 void debugmessage(const struct message *msg);                   /* Debug print a message */
-STATUS timestampmessage(struct message *msg);                      /* Time stamp a message */
+status timestampmessage(struct message *msg);                      /* Time stamp a message */
 
 #endif

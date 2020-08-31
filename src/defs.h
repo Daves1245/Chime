@@ -20,6 +20,11 @@
 #define UINT64_BASE10_LEN 21 // XXX rename this atrocity
 #define UINT32_BASE10_LEN 12 // XXX number of base10 digits needed to store all values of 32 bit integer
 
+/* Default connection info */
+#define PORT "33401" /* The default port for chatting */
+#define FTPORT "33402" /* The default port for file transferring */
+#define LOCALHOST "127.0.0.1" /* useful macro for loopback */
+
 /* Wait for input in ms */
 #define POLL_TIMEOUT 100
 

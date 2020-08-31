@@ -9,7 +9,7 @@
 #include "message.h"
 #include "transmitmsg.h"
 
-STATUS chime_connect(struct connection *conn) {
+status chime_connect(struct connection *conn) {
   return OK;
 }
 

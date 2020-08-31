@@ -14,7 +14,7 @@
  * * OK on success
  * * ERROR_NOT_INITIALIZED if log_output_stream is not initialized
  */
-STATUS logs(const char *str) {
+status logs(const char *str) {
   if (!log_output_stream) {
     return ERROR_NOT_INITIALIZED;
   }

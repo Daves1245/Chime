@@ -4,10 +4,16 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <libgen.h>
 
 #include "connection.h"
 #include "ftransfer.h"
 #include "defs.h"
+#include "transmitmsg.h"
+#include "ftrequest.h"
 #include "math.h"
 
 // TODO use SOCK_SEQPACKET ? 
@@ -31,7 +37,7 @@
  *    file was sent through the connection.
  *    XXX return from file transfer thread unsuccessful
  */
-STATUS sendheader(int transferfd, const struct fileheader *fi) {
+status sendheader(int transferfd, const struct fileheader *fi) {
   char buff[HEADERBUFF_LEN];
   int sent = 0, bufflen, tmp;
   sprintf(buff, "%s\n%ld\n", fi->filename, fi->size);
@@ -78,7 +84,7 @@ STATUS sendheader(int transferfd, const struct fileheader *fi) {
  *  any data not part of the header is sent back to the socket so
  *  that a later recv() may rightfully get it.
  */ 
-STATUS recvheader(int transferfd, struct fileheader *fi) {
+status recvheader(int transferfd, struct fileheader *fi) {
   char buff[HEADERBUFF_LEN], *fieldp;
   int received = 0, tmp;
   memset(buff, 0, sizeof buff);
@@ -140,7 +146,7 @@ STATUS recvheader(int transferfd, struct fileheader *fi) {
  *      The number of bytes received was less than that specified
  *      by fi->size. The resulting file may or may not be incomplete,
  */
-STATUS downloadfile(int transferfd, int outfd, const struct fileheader *fi) {
+status downloadfile(int transferfd, int outfd, const struct fileheader *fi) {
   printf("downloadfile called with transferfd %d and outfd %d\n", transferfd, outfd);
   char buff[FILEBUFF_LEN];
   int received = 0, written = 0, tmp;
@@ -191,7 +197,7 @@ STATUS downloadfile(int transferfd, int outfd, const struct fileheader *fi) {
  * * ERROR_INCOMPLETE_SEND
  *    the number of bytes sent was less than fi->size
  */
-STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
+status uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
   printf("uploadfile called with filefd: %d\n", filefd);
   char buff[FILEBUFF_LEN];
   int sent = 0, bread = 0, tmp;
@@ -230,4 +236,125 @@ STATUS uploadfile(int filefd, int transferfd, const struct fileheader *fi) {
   }
   printf("leaving uploadfile. file size: %ld, bytes read: %d. bytes sent: %d\n", fi->size, bread, sent);
   return OK;
+}
+
+status create_upload_request(struct ftrequest **dest, char *filepath) {
+  struct ftrequest *request;
+  struct stat file_stats;
+  int fd;
+
+  request = malloc(sizeof(struct ftrequest));
+  if (!request) {
+    perror("malloc");
+    return ERROR_FAILED_SYSCALL; // TODO malloc is not a syscall
+  }
+  if ((fd = open(filepath, O_RDONLY)) == -1) {
+    free(request);
+    if (errno == EINTR) {
+      return ERROR_INTERRUPTED;
+    }
+  }
+  if (stat(filepath, &file_stats) < 0) {
+    free(request);
+    perror("stat");
+    return ERROR_FAILED_SYSCALL;
+  }
+  /* Make sure things are valid */
+  if (S_ISDIR(file_stats.st_mode)) {
+    fprintf(stderr, "Cannot upload a directory\n");
+    free(request);
+    return ERROR_INVALID_ARGUMENTS;
+  }
+
+  /* Note this sets broadcast to false by default */
+  memset(request, 0, sizeof(struct ftrequest));
+
+  /* Pack the header */
+  strcpy(request->finfo.header.filename, basename(filepath));
+  request->finfo.header.size = file_stats.st_size;
+
+  /* Pack the fileinfo struct */
+  request->finfo.fd = fd;
+
+  /* Request to upload */
+  request->finfo.status = UPLOAD;
+
+  /* Finalize changes */
+  *dest = request;
+
+  /* conn should be added oustide of this function */
+  return OK;
+}
+
+status handle_upload_request(struct connection *conn) {
+  struct ftrequest request;
+  int fd;
+
+  if (recvheader(conn->transferfd, &request.finfo.header) != OK) {
+    fprintf(stderr, "(handle_upload_request): recvheader returned non-OK status\n");
+  }
+
+  if ((request.finfo.fd = open(request.finfo.header.filename, O_CREAT | O_WRONLY)) < 0) {
+    perror("open");
+  }
+
+  if ((fd = open(request.finfo.header.filename, O_CREAT | O_WRONLY)) < 0) {
+    if (errno == EINTR) return ERROR_INTERRUPTED;
+    perror("open");
+    return ERROR_FAILED_SYSCALL;
+  }
+
+  if (downloadfile(conn->transferfd, fd, &request.finfo.header) != OK) {
+    fprintf(stderr, "(handle_upload_request): downloadfile returned non-OK status\n");
+  }
+
+  return OK;
+}
+
+void *filetransfer(void *request) {
+  struct ftrequest *req = (struct ftrequest *) request;
+  struct message msg;
+
+  printf("filetransfer called with conn: %p", (struct connection *) req->conn);
+
+  switch (req->finfo.status) {
+    case UPLOAD:
+      printf("BEFORE SH CONN IS %p\n", req->conn);
+      printf("[filetransfer]: beginning upload\n");
+      printf("[filetransfer]: sending header...\n");
+      if (sendheader(req->conn->transferfd, &req->finfo.header) != OK) {
+        printf("SENDHEADER RETURNED NON-OK STATUS\n");
+      }
+      printf("AFTER SH CONN IS %p\n", req->conn);
+      printf("[filetransfer]: done\n");
+      printf("[filetransfer]: sending file...\n");
+      if (uploadfile(req->finfo.fd, req->conn->transferfd, &req->finfo.header) != OK) {
+        printf("UPLOADFILE RETURNED NON-OK STATUS\n");
+      }
+      recvmessage(req->conn->transferfd, &msg);
+      printf("[filetransfer]: Response: %s\n", msg.txt);
+      break;
+    case DOWNLOAD:
+      printf("[filetransfer]: beginning download\n");
+      printf("[filetransfer]: receiving header...\n");
+      if (recvheader(req->conn->transferfd, &req->finfo.header) != OK) {
+        printf("RECVHEADER RETURNED NON-OK STATUS\n");
+      }
+      printf("[filetransfer]: done\n"); 
+      printf("[filetransfer]: downloading file...\n");
+      if (downloadfile(req->conn->transferfd, req->finfo.fd, &req->finfo.header) != OK) {
+        printf("[filetransfer]: DOWNLOADFILE RETURNED NON-OK STATUS\n");
+      }
+      break;
+    case NOT_READY:
+      fprintf(stderr, "[filetransfer]: Thread created when file not ready to be handled\n");
+      return NULL;
+      break;
+    default:
+      fprintf(stderr, "[filetransfer]: Unrecognized status option\n");
+      break;
+  }
+  close(req->finfo.fd);
+  free(request);
+  return NULL;
 }

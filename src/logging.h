@@ -7,7 +7,7 @@
 
 FILE *log_output_stream;
 
-STATUS logs(const char *str); /* Log a message to the output stream */
+status logs(const char *str); /* Log a message to the output stream */
 void log_init(void); /* Initialize logging resources */
 
 #endif

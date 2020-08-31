@@ -14,6 +14,7 @@
 #include <poll.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #include "colors.h"
 #include "getinet.h"
@@ -49,6 +50,7 @@ struct p2p_info {
 };
 
 FILE *outputstream;
+int upload_dir_fd = -1;
 
 int transfer_conns_arr[BACKLOG];
 int *transfer_conns;
@@ -97,7 +99,7 @@ void freeconnections(struct connection *c) {
  * Check if provided user hints are valid
  * and if so, login the new user.
  */
-STATUS login_user(struct connection *entry) {
+status login_user(struct connection *entry) {
   struct connection *iterator;
   if (!connections) {
     connections = entry;
@@ -140,7 +142,7 @@ STATUS login_user(struct connection *entry) {
  * the requested user could not be found,
  * OK on success.
  */
-STATUS logoff_user(int sfd) {
+status logoff_user(int sfd) {
   struct connection *iterator = connections;
   int flag = 0;
   while (!flag || iterator != connections) {
@@ -199,12 +201,12 @@ void broadcastmsg(struct message *m) {
   }
 }
 
-STATUS setup_p2p(struct p2p_request *req) {
+status setup_p2p(struct p2p_request *req) {
   return OK;
 }
 
 void *on_finish_do(void *arg) {
-  
+  return NULL; 
 }
 
 void *file_transfer(void *ftreq) {
@@ -433,7 +435,7 @@ void *manager(void *arg) {
             }
 
             /* TODO fix impending duplicate-name bug */
-            while ((request.finfo.fd = open(request.finfo.header.filename, O_CREAT | O_WRONLY, MODE)) == -1 && errno == EINTR);
+            while ((request.finfo.fd = openat(upload_dir_fd, request.finfo.header.filename, O_CREAT | O_WRONLY, MODE)) == -1 && errno == EINTR);
             if (request.finfo.fd < 0) {
               logs(CHIME_WARN "Could not create a file for file transfer");
               perror("write");
@@ -474,7 +476,7 @@ void *manager(void *arg) {
             conn->next = conn->prev = conn; // TODO make CONNECTION_INIT(conn);
             conn->secret = secret;
             strcpy(conn->uinfo.handle, m.from);
-            STATUS s = login_user(conn);
+            status s = login_user(conn);
             if (s == ERROR_USERNAME_IN_USE) {
               sprintf(ret.txt, "A user with the name %s already exists", conn->uinfo.handle);
               ret.flags = ECONNDROPPED;
@@ -485,7 +487,7 @@ void *manager(void *arg) {
                * but this works for now
                */
               // hint that logoff_user will return more than two states later
-              STATUS s = logoff_user(listener[i].fd);
+              status s = logoff_user(listener[i].fd);
               if (s == ERROR_USER_NOT_FOUND) {
                 logs("ERR USER NOT FOUND. This should not display. If you see this please post to https://www.github.com/Daves1245/Chime/issues");
               }
@@ -517,7 +519,11 @@ void *manager(void *arg) {
 void init(void) {
   srand(time(NULL));
   transfer_conns = transfer_conns_arr;
+
+  mkdir("uploads", MODE);
+  upload_dir_fd = open("uploads", O_DIRECTORY);
 }
+
 
 /*
  * name: main

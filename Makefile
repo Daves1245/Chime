@@ -36,5 +36,5 @@ clean_all:
 # Compile
 bin/$(CFG)/chime:
 	$(DIR_GUARD)
-	$(CC) $(FLAGS) $(CLIENT_SOURCES) -o bin/$(CFG)/client $(LIB_FLAGS)
-	$(CC) $(FLAGS) $(SERVER_SOURCES) -o bin/$(CFG)/server $(LIB_FLAGS)
+	$(CC) $(FLAGS) $(INC) $(CLIENT_SOURCES) -o bin/$(CFG)/client $(LIB_FLAGS)
+	$(CC) $(FLAGS) $(INC) $(SERVER_SOURCES) -o bin/$(CFG)/server $(LIB_FLAGS)
