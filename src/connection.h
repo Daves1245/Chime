@@ -16,7 +16,7 @@
  */
 struct connection {
     int sfd;                        /* This user's socket for messaging */
-    int transferfd;                 /* This user's socket for file transfers */
+    int ft_sfd;                     /* This user's socket for file transfers */
     struct user uinfo;              /* Info about user */
     struct connection *next, *prev; /* Make this a linked list */
 };

@@ -8,7 +8,7 @@
 #include "connection.h"
 #include "transmitfile.h"
 #include "defs.h"
-#include "math.h"
+#include "functions.h"
 
 /*
  * sendheader() - send a file header

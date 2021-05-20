@@ -8,7 +8,7 @@ DIR_GUARD=@mkdir -p $(@D)
 # Build Configurations
 CFG=release
 ifeq ($(CFG), debug)
-	FLAGS += -g -DDEBUG
+	FLAGS += -g -DDEBUG -DWNO_ERROR -O0
 endif
 ifneq ($(CFG),debug)
 ifneq ($(CFG),release)
@@ -19,8 +19,8 @@ endif
 endif
 
 # Sources
-CLIENT_SOURCES=src/math.c src/message.c src/logging.c src/transmitmsg.c src/connection.c src/transmitfile.c src/client.c
-SERVER_SOURCES=src/math.c src/message.c src/logging.c src/transmitmsg.c src/connection.c src/transmitfile.c src/server.c
+CLIENT_SOURCES=src/functions.c src/message.c src/logging.c src/transmitmsg.c src/connection.c src/transmitfile.c src/client.c
+SERVER_SOURCES=src/functions.c src/message.c src/logging.c src/transmitmsg.c src/connection.c src/transmitfile.c src/server.c
 
 # Main targets
 .PHONY: all clean
