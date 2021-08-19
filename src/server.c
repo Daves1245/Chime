@@ -37,12 +37,6 @@
  * - uptime functionality
  */
 
-#define MAX_THREADS 4
-
-int transfer_conns_arr[MAX_USERS];
-int *transfer_conns;
-int num_transfer_conns;
-
 void broadcastmsg(struct message *m);           /* Broadcast msg to all users */
 void broadcast(const char *msg, size_t msglen); /* To be deprecated */
 void *manager(void *arg);                       /* Manager thread for connections */
@@ -175,16 +169,6 @@ struct ft_thread_info {
     struct sockaddr_storage client_addr;
     socklen_t addr_len;
 };
-
-struct ft_thread_info ft_owners[MAX_CONCURRENT_TRANSFERS];
-
-void init_owners(void) {
-    for (int i = 0; i < sizeof(ft_owners); i++) {
-        ft_owners[i].cond = PTHREAD_COND_INITIALIZER;
-        ft_owners[i].mutex = PTHREAD_MUTEX_INITIALIZER;
-        memset(ft_owners[i].global_buffer, 0, sizeof(ft_owners[i].global_buffer));
-    }
-}
 
 /* Arbitrary for now -
  * ideally this contains a unique id
@@ -438,6 +422,7 @@ void broadcastmsg(struct message *m) {
    */
 
 /* PROTOTYPE FILE MANAGEMENT */
+/*
 void *transfermanager(void *arg) {
     int listenfd, newfd, rv;
     struct addrinfo hints, *servinfo, *p;
@@ -518,6 +503,7 @@ setup_check:
     }
     return NULL;
 }
+*/
 
 /*
  * name: manager TODO
@@ -602,8 +588,6 @@ void chime_init(void) {
     /* Signal handling */
     struct sigaction s_act, s_oldact;
     int res;
-
-    transfer_conns = transfer_conns_arr;
 
     /* Set handler for SIGINT and SIGTERM */
     s_act.sa_sigaction = sa_handle;
@@ -707,6 +691,7 @@ pthread_t get_owner_from_secret(long long secret) {
     return secret_owner[(int) secret];
 }
 
+/*
 void *chime_receive_file(void *arg) {
     struct data_packet *header = (struct data_packet *) arg;
     int fd;
@@ -740,6 +725,7 @@ void *chime_receive_file(void *arg) {
 
     return NULL;
 }
+*/
 
 int num_threads;
 
@@ -824,6 +810,7 @@ void finish_transfer(long long secret) {
 }
 
 // TODO cleanup
+/*
 void *file_transfer(void *arg) {
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr;
@@ -833,7 +820,6 @@ void *file_transfer(void *arg) {
     socklen_t addr_len;
     int running = 1;
 
-    /* - - - - - - - - BIND TO PORT - - - - - - - - - */
     // TODO modularize - this code has been seen many times before
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;
@@ -865,7 +851,6 @@ void *file_transfer(void *arg) {
         return NULL; // TODO return NO_SUCCESS
     }
 
-    /* - - - - - - - - - FILE TRANSFERING - - - - - - - - - - - - */
     addr_len = sizeof their_addr;
     while (running) {
         int recieved = 0;
@@ -876,7 +861,7 @@ void *file_transfer(void *arg) {
                 perror("recvfrom");
                 // TODO handle recvfrom error
             }
-            /*
+            *
              * A packet with an alpha first letter is treated as a
              * transfer request. Valid requests either start with 'U'
              * for upload or 'D' for download. Any other value is
@@ -887,7 +872,7 @@ void *file_transfer(void *arg) {
              * where | is the newline '\n' delimeter. If sequence is nonpositive,
              * it will be treated as a FIN packet in which case the transfer process
              * for the file associated with <secret> will be completed.
-             */
+             
             if (isalpha(*buff)) {
                 void *(*thread)(void *);
                 int fd;
@@ -898,14 +883,13 @@ void *file_transfer(void *arg) {
                 filename = strtok(NULL, "\n");
 
                 if (num_threads >= MAX_THREADS) {
-                    continue; /* We are at our max! TODO send ERROR - BOTTLENECK */
+                    continue; 
                 }
                 if (*buff == 'U') {
                     thread = chime_receive_file;
                     if ((fd = open(filename, O_CREAT | USER_RW_MODE)) == -1) {
                         switch (errno) {
                             case EACCES:
-                                /* TODO Permission denied */
                                 break;
                             default:
                                 fprintf(stderr, "[%s]: Could not open file\n", __FUNCTION__);
@@ -914,24 +898,20 @@ void *file_transfer(void *arg) {
                         }
                     }
                 } else if (*buff == 'D') {
-                    /* Ignore the request specifier */
                     printf("[%s]: client requested to download file `%s`\n", __FUNCTION__, filename);
                     if ((fd = open(filename, O_RDONLY)) == -1) {
                         switch (errno) {
                             case EACCES:
-                                /* TODO "Permission denied" */
                                 break;
                             default:
                                 fprintf(stderr, "[%s]: Could not open file\n", __FUNCTION__);
                                 perror("open");
                                 break;
                         }
-                        /* TODO chime_send_file has to know the client address and fd to be able to talk with them!
-                         * An abstraction of "transfer info" and "client info" would work nicely here */
                     }
                     thread = chime_send_file;
                 } else {
-                    break; /* Ignore this packet - invalid transfer request */
+                    break;
                 }
 
                 open_files[open_files_i] = fd;
@@ -941,27 +921,22 @@ void *file_transfer(void *arg) {
                     logs(CHIME_WARN "[file_transfer]: Unable to handle client request");
                     fprintf(stderr, "pthread error\n");
                     perror("pthread");
-                    continue; /* TODO if too many threads, send ERROR - BOTTLENECK */
+                    continue;
                 }
             } else if (isnumber(buff)) {
                 long long secret, seq;
                 char *sec_end, *seq_end;
                 errno = 0;
                 secret = strtoll(buff, &sec_end, NUMERIC_BASE);
-                assert(errno == 0); /* NOTE: not in C99 */
+                assert(errno == 0);
                 errno = 0;
                 seq = strtoll(buff, &seq_end, NUMERIC_BASE);
                 if (seq == -1) {
                     acknowledge(make_data_packet(secret, seq, seq_end + 1));
                     finish_transfer(secret);
                 }
-                assert(errno == 0); /* NOTE: not in C99 */
+                assert(errno == 0);
                 make_and_push_data(secret, seq, seq_end + 1);
-                /*
-                 * TODO
-                 * if filewriter is asleep, notify that there is new data to write 
-                 * ENSURE THAT THIS IS ATOMIC! Data races here could be problematic
-                 */
             }
         }
         perror("recvfrom");
@@ -969,6 +944,7 @@ void *file_transfer(void *arg) {
     }
     return NULL;
 }
+*/
 
 /*
  * name: main
@@ -995,7 +971,6 @@ int main(int argc, char **argv) {
 
     log_init(stdout); // logs() will print to stdout
     chime_init();
-    init_owners();
 
     sprintf(logbuff, "Creating server on port %s", PORT); // XXX logs var args
     logs(logbuff);
@@ -1010,14 +985,6 @@ int main(int argc, char **argv) {
     }
 
     logs(GREEN "Manager thread created" ANSI_RESET);
-
-    /* Handle transfering files to/from server */
-    if (pthread_create(&transfert, NULL, file_transfer, NULL)) {
-        logs(CHIME_WARN "WARNING: Unable to create file transfering thread");
-        perror("pthread_create");
-    }
-
-    logs("File transfer thread created");
     logs("Waiting for connections...");
 
     /* Accept new connections to the server */
