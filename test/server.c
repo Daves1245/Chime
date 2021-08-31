@@ -42,10 +42,6 @@ int main(void) {
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE; // use my IP
 
-    /* Set nonblocking mode? */
-    int flags = fcntl(sockfd, F_GETFL, 0);
-    int res = fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
-    printf("Result from set to nonblocking is %d\n", res);
 
     if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
@@ -76,12 +72,13 @@ int main(void) {
     addr_len = sizeof their_addr;
 
     /*
-    if ((numbytes = recvfrom(sockfd, buff, MAX_BUFF_LEN - 1, 0,
-                    (struct sockaddr *) &their_addr, &addr_len)) == -1) {
-        perror("recvfrom");
-        exit(1);
-    }
-    */
+       if ((numbytes = recvfrom(sockfd, buff, MAX_BUFF_LEN - 1, 0,
+       (struct sockaddr *) &their_addr, &addr_len)) == -1) {
+       perror("recvfrom");
+       exit(1);
+       }
+       */
+
     printf("receiving (shouldn't block!)\n");
     receive_unsafe(sockfd, (struct sockaddr *) &their_addr, &addr_len);
     printf("done receiving\n");
@@ -108,6 +105,7 @@ int main(void) {
         perror("open");
         exit(EXIT_FAILURE);
     }
+    printf("entering loop...\n");
     while (1) {
         receive_unsafe(sockfd, (struct sockaddr *) &their_addr, &addr_len);
         handle_packet();
@@ -119,9 +117,9 @@ int main(void) {
         lseek(fd, ftp->seq * finfo->ftp_data_size, SEEK_SET);
         int bwritten = 0;
         printf("Writing packet to file...\n");
-        while (bwritten < strlen(ftp->data)) {
+        while (bwritten < finfo->ftp_data_size) {
             int tmp;
-            if ((tmp = write(fd, ftp->data + bwritten, strlen(ftp->data))) < 0) {
+            if ((tmp = write(fd, ftp->data + bwritten, finfo->ftp_data_size - bwritten)) < 0) {
                 fprintf(stderr, "error while writing\n");
                 exit(EXIT_FAILURE);
             }

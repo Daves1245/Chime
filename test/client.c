@@ -56,8 +56,8 @@ int main(int argc, char **argv) {
     int rv;
     int numbytes;
 
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s hostname", argv[0]);
+    if (argc != 3) {
+        fprintf(stderr, "usage: %s [hostname] [file]\n", argv[0]);
         exit(1);
     }
 
@@ -92,13 +92,13 @@ int main(int argc, char **argv) {
     */
 
     struct stat st;
-    stat("Makefile", &st);
+    stat(argv[2], &st);
     printf("[DEBUG]: st_size is %ld\n", st.st_size);
-    struct file_transfer_info *finfo = make_fti("Makefile", st.st_size, 40, 2);
+    struct file_transfer_info *finfo = make_fti(argv[2], st.st_size, 40, 2);
     fti_toa(finfo);
     send_unsafe(sockfd, buff, strlen(buff), p);
 
-    FILE *fp = fopen("Makefile", "r");
+    FILE *fp = fopen(argv[2], "r");
     int offset = 0;
     while (!feof(fp)) {
         char localbuff[10000] = {0};
@@ -118,9 +118,6 @@ int main(int argc, char **argv) {
         send_unsafe(sockfd, buff, strlen(buff), p);
         offset += strlen(ftp.data);
     }
-    printf("Finished sending file\n");
-    printf("file is:\n%s\n", filebuff);
-
     //receive_unsafe(sockfd, NULL, NULL);
     close(sockfd);
     return 0;

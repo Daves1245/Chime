@@ -127,6 +127,7 @@ void handle_packet(void) {
     }
 }
 
+/* Packet type - distinguish between a file transfer request header - or FTP, FTPA etc. */
 enum PACKET_TYPE get_type(void) {
     RETURN_IF_EQUAL("FTI", FTI);
     RETURN_IF_EQUAL("FTPA", FTP_ACK);
@@ -185,11 +186,13 @@ struct file_transfer_packet *a_toftp(void) {
     errno = 0;
     seqstr = strtok(buff + 3, "\n");
     printf("Sequence str: `%s`\n", seqstr);
+    int seq_len = strlen(seqstr);
     assert(seqstr);
     ret->seq = (int) strtol(seqstr, NULL, 10);
     assert(errno == 0);
-    data = strtok(NULL, "\n");
+    data = buff + 4 + seq_len;
     strncpy(ret->data, data, strlen(data));
+    memset(buff, 0, sizeof(buff));
     return ret;
 }
 
@@ -249,19 +252,15 @@ struct file_transfer_info *a_tofti(void) {
 }
 
 void receive_unsafe(int socket_fd, struct sockaddr *their_addr, socklen_t *addr_len) {
-    int bytes_received;
-    int tmp;
+    int bytes_received = 0;
     printf("DEBUG: before receive!\n");
-    while ((tmp = recvfrom(socket_fd, buff, MAX_BUFF_LEN - 1, 0, their_addr, addr_len)) > 0) {
+    printf("socket file descriptor called for receive_unsafe is %d\n", socket_fd);
+    if ((bytes_received = recvfrom(socket_fd, buff, MAX_BUFF_LEN - 1, 0, their_addr, addr_len)) < 0) {
         printf("DEBUG: inside receive!\n");
-        bytes_received += tmp;
-        printf("errno is %d\n", errno);
     }
-    if (errno != EWOULDBLOCK) {
+    if (errno != 0) {
         perror("recvfrom");
         exit(1);
-    } else {
-        printf("would have blocked!\n");
     }
     printf("received %d bytes\n", bytes_received);
     printf("got packet `%s`\n", buff);
