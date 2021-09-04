@@ -2,6 +2,7 @@
  * server.c - simple UDP server demo
  */
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -105,11 +106,22 @@ int main(void) {
         perror("open");
         exit(EXIT_FAILURE);
     }
+    int expected_packets = (int) ceil((double) finfo->file_size/ finfo->ftp_data_size);
+    int *pseq_received = malloc(sizeof(int) * (finfo->file_size / finfo->ftp_data_size));
+    if (!pseq_received) {
+        fprintf(stderr, "malloc() failed\n");
+        exit(EXIT_FAILURE);
+    }
+    int distinct_packs = 0;
     printf("entering loop...\n");
-    while (1) {
+    while (distinct_packs < expected_packets) {
         receive_unsafe(sockfd, (struct sockaddr *) &their_addr, &addr_len);
         handle_packet();
         struct file_transfer_packet *ftp = a_toftp();
+        // only ++ if we haven't seen this pack before
+        distinct_packs += !pseq_received[ftp->seq];
+        // set the seq to visited
+        pseq_received[ftp->seq] |= 1;
         printf("seq number is %d\n", ftp->seq);
         printf("writing to byte %ld\n", (off_t) ftp->seq * finfo->ftp_data_size);
         printf("data being written: ||||%s||||\n", ftp->data);
@@ -128,6 +140,7 @@ int main(void) {
         printf("Finished.\n");
     }
 
+    free(pseq_received);
     close(sockfd);
     return 0;
 }

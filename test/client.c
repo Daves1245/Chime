@@ -82,15 +82,6 @@ int main(int argc, char **argv) {
         // who cares?
     }
 
-    /*
-    if ((numbytes = sendto(sockfd, argv[2], strlen(argv[2]), 0, p->ai_addr, p->ai_addrlen)) == -1) {
-        perror("sendto");
-        exit(1);
-    }
-
-    printf("sent %d bytes to %s\n", numbytes, argv[1]);
-    */
-
     struct stat st;
     stat(argv[2], &st);
     printf("[DEBUG]: st_size is %ld\n", st.st_size);
@@ -118,7 +109,6 @@ int main(int argc, char **argv) {
         send_unsafe(sockfd, buff, strlen(buff), p);
         offset += strlen(ftp.data);
     }
-    //receive_unsafe(sockfd, NULL, NULL);
     close(sockfd);
     return 0;
 }
