@@ -24,12 +24,12 @@
 #include "connection.h"
 #include "transmitmsg.h"
 #include "signaling.h"
-#include "logging.h"
 #include "fileheader.h"
 #include "transmitfile.h"
 #include "functions.h"
 #include "fileinfo.h"
 #include "ft_request.h"
+#include "logging.h"
 
 /*
  * v 1.0.1 TODO list

@@ -26,8 +26,8 @@
 #include "fileheader.h"
 #include "fileinfo.h"
 #include "ft_request.h"
-#include "logging.h"
 #include "functions.h"
+#include "logging.h"
 
 /*
  * TODO

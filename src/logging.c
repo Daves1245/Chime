@@ -3,6 +3,8 @@
 #include "logging.h"
 #include "colors.h"
 
+FILE *log_output_stream = NULL;
+
 /*
  * logs(string) - log a message
  * params: str; message to be logged
@@ -21,6 +23,7 @@ STATUS logs(const char *str) {
     if (!log_output_stream) {
         return ERROR_NOT_INITIALIZED;
     }
+
     time(&rtime);
     now = localtime(&rtime);
     fprintf(log_output_stream, CYAN "[%d:%02d]: " ANSI_RESET "%s\n" ANSI_RESET, now->tm_hour, now->tm_min, str);
