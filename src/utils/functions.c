@@ -1,7 +1,7 @@
 #include <ctype.h>
 #include <stdio.h>
 
-#include "functions.h"
+#include <utils/functions.h>
 
 int min(int a, int b) {
     return a < b ? a : b;

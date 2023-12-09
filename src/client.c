@@ -15,18 +15,19 @@
 #include <fcntl.h>
 #include <ctype.h>
 
+#include <utils/defs.h>
+#include <utils/common.h>
+#include <utils/colors.h>
+#include <utils/functions.h>
+#include <ftransfer/transmitfile.h>
+#include <ftransfer/fileheader.h>
+#include <ftransfer/fileinfo.h>
+#include <ftransfer/ft_request.h>
+
 #include "signaling.h"
-#include "common.h"
 #include "message.h"
-#include "colors.h"
-#include "defs.h"
 #include "threading.h"
 #include "transmitmsg.h"
-#include "transmitfile.h"
-#include "fileheader.h"
-#include "fileinfo.h"
-#include "ft_request.h"
-#include "functions.h"
 #include "logging.h"
 
 /*

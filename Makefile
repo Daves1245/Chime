@@ -1,7 +1,7 @@
 # Compiler Variables
 CC=gcc
 FLAGS=-Wall
-INC=-Isrc/
+INC=-Isrc/ -Isrc/utils/
 LIB_FLAGS=-lpthread -lm
 DIR_GUARD=@mkdir -p $(@D)
 
@@ -19,8 +19,8 @@ endif
 endif
 
 # Sources
-CLIENT_SOURCES=src/functions.c src/message.c src/logging.c src/transmitmsg.c src/connection.c src/transmitfile.c src/client.c
-SERVER_SOURCES=src/functions.c src/message.c src/logging.c src/transmitmsg.c src/connection.c src/transmitfile.c src/server.c
+CLIENT_SOURCES=src/utils/functions.c src/message.c src/logging.c src/transmitmsg.c src/connection.c src/ftransfer/transmitfile.c src/client.c
+SERVER_SOURCES=src/utils/functions.c src/message.c src/logging.c src/transmitmsg.c src/connection.c src/ftransfer/transmitfile.c src/server.c
 
 # Main targets
 .PHONY: all clean
@@ -36,5 +36,5 @@ clean_all:
 # Compile
 bin/$(CFG)/chime:
 	$(DIR_GUARD)
-	$(CC) $(FLAGS) $(CLIENT_SOURCES) -o bin/$(CFG)/client $(LIB_FLAGS)
-	$(CC) $(FLAGS) $(SERVER_SOURCES) -o bin/$(CFG)/server $(LIB_FLAGS)
+	$(CC) $(FLAGS) $(CLIENT_SOURCES) -o bin/$(CFG)/client $(LIB_FLAGS) $(INC)
+	$(CC) $(FLAGS) $(SERVER_SOURCES) -o bin/$(CFG)/server $(LIB_FLAGS) $(INC)

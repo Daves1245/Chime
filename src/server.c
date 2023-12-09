@@ -17,18 +17,19 @@
 #include <ctype.h>
 #include <assert.h>
 
-#include "colors.h"
-#include "common.h"
+#include <utils/colors.h>
+#include <utils/common.h>
+#include <utils/defs.h>
+#include <utils/functions.h>
+#include <ftransfer/transmitfile.h>
+#include <ftransfer/fileheader.h>
+#include <ftransfer/fileinfo.h>
+#include <ftransfer/ft_request.h>
+
 #include "message.h"
-#include "defs.h"
 #include "connection.h"
 #include "transmitmsg.h"
 #include "signaling.h"
-#include "fileheader.h"
-#include "transmitfile.h"
-#include "functions.h"
-#include "fileinfo.h"
-#include "ft_request.h"
 #include "logging.h"
 
 /*
