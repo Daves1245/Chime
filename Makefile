@@ -19,8 +19,7 @@ endif
 endif
 
 # Sources
-CLIENT_SOURCES=src/utils/functions.c src/message.c src/logging.c src/transmitmsg.c src/connection.c src/ftransfer/transmitfile.c src/client.c
-SERVER_SOURCES=src/utils/functions.c src/message.c src/logging.c src/transmitmsg.c src/connection.c src/ftransfer/transmitfile.c src/server.c
+SOURCES=src/utils/functions.c src/message.c src/logging.c src/transmitmsg.c src/connection.c src/ftransfer/transmitfile.c src/client.c src/server.c src/main.c
 
 # Main targets
 .PHONY: all clean
@@ -36,5 +35,4 @@ clean_all:
 # Compile
 bin/$(CFG)/chime:
 	$(DIR_GUARD)
-	$(CC) $(FLAGS) $(CLIENT_SOURCES) -o bin/$(CFG)/client $(LIB_FLAGS) $(INC)
-	$(CC) $(FLAGS) $(SERVER_SOURCES) -o bin/$(CFG)/server $(LIB_FLAGS) $(INC)
+	$(CC) $(FLAGS) $(SOURCES) -o bin/$(CFG)/chime $(LIB_FLAGS) $(INC)

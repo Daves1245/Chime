@@ -1,3 +1,5 @@
+#ifndef THREADING_H
+#define THREADING_H
 #include <inttypes.h>
 #include <time.h>
 #include <signal.h>
@@ -32,4 +34,4 @@ void *connection_handler(void *);                   /* Connection handling threa
  * XXX Create and implement robust disconnect protocol
  * - 
  */
-
+#endif

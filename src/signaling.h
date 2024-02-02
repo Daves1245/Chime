@@ -6,6 +6,7 @@
 /*
  * If the connected flag is unset via a
  * caught signal, we disconnect gracefully */
-volatile sig_atomic_t connected = 1;
+
+// volatile sig_atomic_t connected = 1;
 
 #endif

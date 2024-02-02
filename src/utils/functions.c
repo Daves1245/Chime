@@ -20,3 +20,19 @@ int isnumber(const char *str) {
     return 1;
 }
 
+/*
+ * int isinteger(str) - check if str is a number
+ *
+ * returns:
+ *  true if str contains a valid, positive integer
+ *  false otherwise
+ */
+int isinteger(const char *str) {
+    for (const char *c = str; *c != '\0'; c++) {
+        if (!isdigit(*c)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
